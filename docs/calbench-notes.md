@@ -1,6 +1,55 @@
 # CalBench access check (Task 0)
 
-## Status
+## ⭐ TL;DR: the real repo, verified working
+
+```
+git clone https://github.com/bosonphoton/calbench2026.git
+```
+
+This is a real, public, de-anonymized mirror of the same repo behind the
+`anonymous.4open.science` link (its own README literally still says
+`git clone <anonymous-review-repository-url>`, and its single commit is
+titled "Prepare anonymous CalBench release"). Confirmed by cloning and
+inspecting it directly — contents match the paper exactly (VPS in
+`calendar_game/privacy.py`, CP-SAT via `ortools.sat.python.cp_model` in
+`calendar_game/solver.py`, task generator in `calendar_game/taskgen.py`).
+
+⚠️ **Don't trust `github.com/bosonphoton/calbench`** (no `2026` suffix) —
+that URL surfaced repeatedly from PDF/search-summary tools but is a
+hallucination (confirmed 404). The real name has `2026` on the end.
+
+- **Python 3.11+, managed with `uv`.** `uv sync` after cloning (vendors
+  its own `a2a-engine` and `expt-runner` companion packages under
+  `vendor/`, so no private sibling checkouts needed).
+- **No LICENSE file in the repo.** Default copyright rules apply — safe
+  to read, run locally, and cite, but check with the authors (or wait for
+  an official license) before redistributing code or building a public
+  fork on top of it.
+- Single commit only — this is a scrubbed release snapshot, not a live
+  dev repo; don't expect it to receive updates the way a normal project
+  would.
+- **Task fixtures are already generated and included**:
+  `tasks/calbench_90_uniform.jsonl` and `tasks/calbench_90_varied.jsonl`
+  (90 tasks each). Each task row already contains the CP-SAT oracle
+  solution **and a greedy baseline solution** — correcting my earlier
+  note below: greedy *is* shipped as data, even though the non-LLM
+  reference *protocols* actually run are IMAP/SD-MAP/DSM.
+- Repo layout: `calendar_game/` (env, agents, solver, taskgen, privacy/
+  VPS, tests), `tasks/` (fixtures), `taskgen_configs/`, `experiments/`
+  (YAML configs, incl. OpenRouter/Vertex-backed LLM runs and a
+  `--dry-run` mode), `analysis/scripts/`, `final_results/` (paper's
+  tables/plots, raw traces intentionally omitted), `a2a-viewer/` (static
+  trace viewer).
+- Quick checks that should work immediately after `uv sync`:
+  `uv run pytest calendar_game/tests`,
+  `uv run python -m calendar_game.taskgen --config taskgen_configs/tiny_varied_density_5a3p.yaml`,
+  `uv run python run.py experiments/example.yaml --dry-run`.
+
+This resolves nearly everything Task 0 needed without requiring a human
+to fight through the anonymous-viewer's bot-blocking — cloning the real
+mirror worked cleanly on the first try.
+
+## Status (superseded by the above, kept for the paper-only findings below)
 
 - The exact code link from the proposal
   (`https://anonymous.4open.science/r/calbench2026-235F/README.md`) is

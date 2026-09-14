@@ -162,6 +162,54 @@ precisely the "counterpart pool of varying flexibility" already in the
 project's deliverables list — this spike shows it isn't a nice-to-have,
 it's the mechanism the whole thesis depends on. Not yet built or run.
 
+## Iteration 3: real CalBench engine, real oracle, no training yet
+
+Cloned the real repo (`github.com/bosonphoton/calbench2026` — see
+`docs/calbench-notes.md`), plugged a minimal custom agent (`RLClient`) into
+the actual game engine via its public testing seam
+(`CalendarGame._run_with_agents`, no engine code touched), and ran it
+across 30 real generated scenarios (2 agents, 16 slots, 3 meetings each)
+against the shipped DSM baseline. Deliberately narrow scope: the RL
+client only makes the DECIDE-phase call (which slot to take); it does no
+cheap-talk/negotiation dialogue yet, and it's a hand-coded heuristic, not
+a trained policy — this iteration tests the plug-in seam and the reward
+signal shape, not learning.
+
+| Agent 0 policy | Mean realized cost | Mean regret vs CP-SAT oracle | Mean success rate |
+|---|---|---|---|
+| DSM (baseline vs baseline) | 0.00 | 0.00 | 100% |
+| RLClient(random) | 2.87 | 2.87 | 100% |
+| RLClient(first-fit-among-free) | 5.03 | 5.03 | 100% |
+
+**Two real findings, both useful:**
+
+1. **The plug-in seam works end to end against the real engine and real
+   CP-SAT oracle**, with zero changes to CalBench's own code. Every
+   scenario stayed 100% "successful" (all meetings scheduled) regardless
+   of agent 0's policy, because the engine has a built-in fallback-repair
+   mechanism (`enable_fallback`) that patches up conflicting slot choices
+   automatically — at a displacement-cost penalty. That's good news for
+   RL: failures show up as *continuous regret*, not a sparse pass/fail
+   signal, which is a much easier reward to learn from.
+2. **Surprise, verified not guessed: "always take the earliest free slot"
+   is worse than picking randomly** (5.03 vs 2.87 mean cost). Checked
+   DSM's own source: it explicitly sorts free slots and breaks ties by
+   lowest slot index (`calendar_game/clients/dsm.py`, `_free_slots` /
+   proposal ranking). So a naive low-index-first policy collides with
+   DSM's own bias more often than random does, forcing more costly
+   fallback repairs. **This directly contradicts the toy spike's finding
+   that a cost-ordering heuristic is a hard-to-beat baseline** — that
+   result was specific to the one-sided, no-collision structure of the
+   hand-rolled bilateral env. In a real two-sided coordination task,
+   naive heuristics can actively hurt each other, which means there is
+   *more* headroom for a policy that reasons about what the counterpart
+   is likely to do than the toy spike alone would suggest.
+
+**Not done in this iteration:** actual PPO training against the real
+engine. This iteration only proves the seam and reward signal are sound;
+training a real policy on it is real, separate work — correctly the W7
+milestone in the timeline, not something to fold into this spike.
+
 ## Overall MVP verdict (as of this spike)
 
 **Provisional go, with a specific, actionable caveat — not a clean yes,
@@ -185,3 +233,47 @@ first-fit) as the headline comparison throughout the project, and
 treating "does PPO beat greedy once counterparts have real concession
 dynamics" as the next go/no-go gate before committing to the full W6-W12
 plan.
+
+**Updated by Iteration 3 (real engine, below): don't over-generalize this
+finding.** It's specific to the hand-rolled bilateral toy env's one-sided
+structure. The real CalBench engine already shows naive heuristics
+*colliding* with each other in ways the toy env couldn't produce — so
+"greedy is hard to beat" is not expected to simply carry over.
+
+## Go/no-go for the whole project, combining the toy spike and the real engine
+
+Three separate things were tested, on purpose, before touching CalBench's
+LLM-scale machinery or spending real training compute:
+
+1. **Does RL learn anything non-trivial once there's real opportunity
+   cost?** Yes — toy spike, one-shot to multi-request, +6% to +29% over
+   first-fit. Learnable signal confirmed cheaply, off-CalBench.
+2. **Is CalBench itself real, working, and something we can build on?**
+   Yes, verified by actually cloning and running it (213/213 tests pass,
+   a real 30-scenario run against the real CP-SAT oracle), not just
+   reading the paper. Integration seam identified and *used*, not just
+   theorized: a custom agent plugs in via `BaseClient` with zero engine
+   changes.
+3. **Does a naive heuristic dominate in the real, two-sided environment
+   the way it did in the toy one?** No — the opposite showed up: a naive
+   heuristic actively collided with the baseline's own bias and lost to
+   random chance. That's evidence *for* the thesis, not against it: real
+   coordination has strategic depth the one-sided toy env couldn't
+   produce, which is exactly where a learned policy has room to help.
+
+**Verdict: go.** Every cheap, fast-to-falsify check that could have
+killed this early (env doesn't produce real signal, CalBench doesn't
+exist or doesn't run, naive heuristics already win) came back negative.
+Nothing here proves the full project succeeds — no PPO has been trained
+against the real engine yet — but nothing found in ~a day of testing
+says it can't. That combination (structurally sound, nothing disqualifying
+found, real open work remaining) is exactly the bar for committing W7
+effort to it rather than either declaring victory early or walking away.
+
+**Concrete next milestone (W7-shaped, not part of this spike):** extend
+`RLClient` to (a) act on real training scenarios across seeds, (b) touch
+the cheap-talk/DM phase, not just decide(), since the collision finding
+above suggests coordination signaling matters a lot, and (c) wire up an
+actual PPO update loop against repeated `game.run()` calls (buffer
+decisions per game, use final metrics as terminal reward — see the
+integration notes in `docs/calbench-notes.md`).
