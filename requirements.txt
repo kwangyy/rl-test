@@ -1,4 +1,18 @@
+# torch: install the CUDA build first (RTX 50-series needs cu128 or newer):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
 gymnasium>=0.29
 numpy>=1.24
 stable-baselines3>=2.3
-torch>=2.2
+torch>=2.7
+
+# factcheck
+transformers
+accelerate
+peft
+trl
+bitsandbytes
+datasets
+bm25s
+PyStemmer
+openai
+python-dotenv

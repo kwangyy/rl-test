@@ -32,6 +32,15 @@ roughly the same class as Qwen3.5-4B.
 
 **Pick: `Qwen3.5-4B`, or `Qwen3.5-2B` if the GPU is tight.**
 
+**Decided 2026-09-19: `Qwen3.5-2B`.** The machine has an RTX 5070 Ti,
+16GB, about 13GB free with the display attached. Loaded in bf16 it uses
+3.8GB for inference. 4B stays the fallback (QLoRA) if 2B cannot hold the
+output format in stage 0. Two caveats found on first load: transformers 5
+is required, and the fast kernels for its linear-attention layers
+(`flash-linear-attention`, `causal_conv1d`) are not installed, so it runs
+on slow reference implementations. Those kernels, and vLLM, need Linux;
+plan on WSL2 for stage 1.
+
 - 4.7B is the real parameter count. Current, Apache-2.0.
 - Direct successor to the Qwen2.5-3B / Qwen3-4B backbones Veri-R1 and
   ProFact used, so numbers stay comparable to theirs.

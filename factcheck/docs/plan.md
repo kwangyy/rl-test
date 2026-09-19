@@ -98,7 +98,8 @@ score from 47.8 to 34.4.
    GRPO-trained verifier for fact verification. It is also cheaper (lambda
    sweeps and action ablations retrain in minutes on CPU). Stages 0 and 1
    are identical either way, so this can wait until stage 1 works.
-2. **Which GPU is available.** Decides the small model size. Not yet known.
+2. ~~**Which GPU is available.**~~ Settled: RTX 5070 Ti 16GB, so
+   Qwen3.5-2B. See [`models.md`](models.md).
 3. **Evidence F1 on Not-Enough-Info claims.** Gold NEI claims have no gold
    evidence, so the term is always 0 on exactly the claims the abstention
    story cares about. Needs a real decision, not the current placeholder.
