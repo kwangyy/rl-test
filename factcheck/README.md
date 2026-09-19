@@ -13,6 +13,7 @@ reliability bins).
 
 ## Docs
 
+- [`REPORT.md`](REPORT.md) — plain-language report: what the project does, results so far, and why continue with it over the math version.
 - [`docs/plan.md`](docs/plan.md) — architecture, what RL is for, the three stages, open decisions.
 - [`docs/related-work.md`](docs/related-work.md) — what is already published, what is open, numbers to beat.
 - [`docs/models.md`](docs/models.md) — which small model to train and which big model to call, with sizes and prices.
