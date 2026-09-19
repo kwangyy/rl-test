@@ -19,10 +19,19 @@ the Friday proposal draft and the 28 Sep submission.
 - **R1 — research bet.** Does PPO beat first-fit at this class of problem
   at all, even in the easiest possible toy setting? This is the risk that
   kills the project if false — better to know now than at W8.
+  **Resolved: yes, proven right, with a sharper caveat.** PPO beats
+  first-fit (+6% one-shot, +29-30% multi-request) but converges to match,
+  not beat, a one-line greedy heuristic — see "Overall MVP verdict" below.
 - **R2 — tooling bet.** Is CalBench (scenario generator, CP-SAT oracle,
-  metrics, VPS privacy metric) actually usable as advertised? Unverified —
-  `anonymous.4open.science` returns HTTP 403 to automated fetch (bot-blocked
-  or JS-rendered), so this needs a human to open it in an actual browser.
+  metrics, VPS privacy metric) actually usable as advertised?
+  **Resolved: yes — but the original plan for resolving it was wrong.**
+  This originally said it needs a human to open `anonymous.4open.science`
+  in a browser (blocked at HTTP 403 to automated fetch). That never
+  happened and turned out to be unnecessary: the real de-anonymized
+  mirror (`github.com/bosonphoton/calbench2026`) was found and cloned
+  directly, then actually plugged in and run (Iteration 3 below,
+  213/213 tests pass, 30 real scenarios against the live CP-SAT oracle).
+  See `docs/calbench-notes.md`.
 
 ## Scope of the spike (explicitly NOT the full project)
 
@@ -45,7 +54,7 @@ full project.
 
 | # | Task | Status |
 |---|------|--------|
-| 0 | Manually open the CalBench link in a browser; record findings in `docs/calbench-notes.md` | **Open — needs a human** |
+| 0 | Manually open the CalBench link in a browser; record findings in `docs/calbench-notes.md` | **Resolved — but not by opening a browser.** Original plan was wrong; see `docs/calbench-notes.md` (license/reuse terms still open there) |
 | 1 | `SlotNegotiationEnv` (Gymnasium) + random-policy sanity check | Done |
 | 2 | First-fit baseline + eval over 200 episodes | Done |
 | 3 | PPO training (~100k steps) + eval vs first-fit | Done — see results below |
@@ -209,6 +218,68 @@ signal shape, not learning.
 engine. This iteration only proves the seam and reward signal are sound;
 training a real policy on it is real, separate work — correctly the W7
 milestone in the timeline, not something to fold into this spike.
+
+## Iteration 4: counterparts with concession dynamics (the gate named in 2b)
+
+`src/concession_env.py` (`ConcessionSlotEnv`): same calendar, reward and
+observation as Iteration 2, but each request's counterpart has a private
+slot cost anti-correlated with self's (real conflict of interest), a
+hidden type (Boulware / Conceder / rigid) that sets how its acceptance
+threshold loosens per round, and a hidden reserve. Re-offering a rejected
+slot is allowed, so "hold firm, re-offer later" is a real move.
+`src/train_ppo_concession.py`, same protocol as 2b (3 seeds, 500k steps,
+ent_coef=0.01, 300 eval episodes, eval seed 0).
+
+**4a (fixed stakes ratio) -- PPO beat first-fit (-2.95) and greedy
+(-3.15) on every seed at -2.741, and the script printed "GO". It was
+wrong.** PPO's accepted slot cost was *higher* than both baselines', which
+gave it away: a one-liner that offers your costliest slot first (= their
+likely favourite) and steps down scored -2.699, matching PPO. It is now a
+baseline, `src/concede_first.py`. Greedy losing to first-fit here is real
+though: against an opposed-interest counterpart, hoarding cheap slots is
+punished.
+
+**Why no policy could beat it:** the reward scaled the no-deal penalty and
+the slot cost by the same urgency, pinning their ratio at 5:1 for *every*
+request. One fixed concession rule was therefore right every time.
+
+**4b (stakes vary per request).** Failing to agree now costs a log-uniform
+0.2-10, observable, against a slot cost of at most 1 -- a meeting with your
+boss must happen at almost any slot cost; a loose catch-up is worth
+dropping rather than burning your best slot. Same PPO protocol:
+
+| Policy | Mean episode reward | Deal rate | Mean accepted cost |
+|---|---|---|---|
+| greedy best-utility-now | -3.012 | 98.0% | 0.699 |
+| first-fit | -2.832 | 99.2% | 0.799 |
+| PPO, 3 seeds | -2.746 (std across seeds 0.014) | 99.0% | 0.824 |
+| concede-first | -2.732 | 100.0% | 0.855 |
+| **stakes-switch** (`src/stakes_switch.py`) | **-2.659** | 81.3% | 0.852 |
+| full-info oracle (2000 eps, sem 0.008) | -2.103 | — | — |
+
+**Honest read: still not a go, and the failure is specific and useful.**
+
+- The new decision the stakes dimension creates is *abstention*: when
+  failing costs 0.2-0.6 but conceding costs ~0.85, the right move is to
+  hold your cheapest slot and let the request fail. `stakes-switch` does
+  exactly that below a swept threshold (deal rate 81%) and is the best
+  non-learned policy.
+- **PPO did not find abstention at all** (99.0% deal rate) and lands 3.3%
+  below stakes-switch, consistently across seeds (std 0.014). Deliberately
+  failing means a run of rejected offers followed by a terminal penalty,
+  with acceptance always tempting in between -- plausibly an exploration/
+  credit-assignment problem rather than a capacity one, but untested.
+- Headroom is now large and *not* closable by one-liners: the oracle leads
+  the best heuristic by 0.56, and threshold sweeps capture ~10% of it. The
+  rest needs inferring the counterpart's hidden type from its rejections,
+  which is the thing the toy env was built to test and the thing PPO has
+  so far declined to do.
+
+**Pattern across 4a and 4b worth carrying into the proposal:** twice now, a
+"PPO wins" result has dissolved once a heuristic was written for the
+behaviour PPO appeared to discover. Any headline RL result in this project
+should ship with the one-line heuristic that imitates it, or it is not
+evidence.
 
 ## Overall MVP verdict (as of this spike)
 

@@ -17,8 +17,9 @@ def evaluate_policy_multi(
     max_rounds: int = 6,
     n_requests: int = 3,
     seed: int = 0,
+    env_cls: type = MultiRequestSlotEnv,
 ) -> dict:
-    env = MultiRequestSlotEnv(n_slots=n_slots, max_rounds=max_rounds, n_requests=n_requests, seed=seed)
+    env = env_cls(n_slots=n_slots, max_rounds=max_rounds, n_requests=n_requests, seed=seed)
     ep_rewards, deals, accepted_costs = [], [], []
 
     for ep in range(n_episodes):

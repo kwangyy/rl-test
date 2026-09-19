@@ -158,13 +158,20 @@ dependency.**
 
 ## Still open — needs a human with a browser
 
-- [ ] Open the actual repo, confirm it installs, check whether the real
+- [x] Open the actual repo, confirm it installs, check whether the real
       code structure matches the paper (papers and code sometimes drift).
+      **Done, proven right:** cloned `bosonphoton/calbench2026`, 213/213
+      tests pass, ran a real 30-scenario game against the live CP-SAT
+      oracle. See Iteration 3 in `docs/mvp-plan.md`.
 - [ ] Check license / terms for reuse given the paper is public but the
-      code link is still styled as an anonymous review link.
-- [ ] Concretely scope what "wrap CalBench" means given point 2 above —
+      code link is still styled as an anonymous review link. **Still
+      unresolved** — no update since this was first written.
+- [x] Concretely scope what "wrap CalBench" means given point 2 above —
       this is a real decision, not just a checkbox, and affects the W6
-      "decide wrap vs reimplement" call materially.
+      "decide wrap vs reimplement" call materially. **Done, proven
+      right:** "wrap" = a custom agent plugged into
+      `CalendarGame._run_with_agents` via the `BaseClient` public testing
+      seam, zero engine changes. See Iteration 3 in `docs/mvp-plan.md`.
 
 ## Recommendation
 

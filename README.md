@@ -29,5 +29,10 @@ side-by-side with the first-fit baseline.
 - `src/first_fit.py` — baseline: earliest free slot, à la Calendly.
 - `src/evaluate.py` — shared eval harness (reward, deal rate, rounds, cost).
 - `src/train_ppo.py` — trains PPO, prints the go/no-go comparison.
+- `src/concession_env.py` — Iteration 4: responsive (Boulware/Conceder/rigid) counterparts.
+- `src/concede_first.py` — baseline: offer your costliest slot first, step down.
+- `src/stakes_switch.py` — baseline: let low-stakes requests fail, concede otherwise.
+- `src/train_ppo_concession.py` — Iteration 4 gate: PPO vs best baseline, 3 seeds.
 - `docs/mvp-plan.md` — why this spike exists, scope, decision rule.
-- `docs/calbench-notes.md` — manual CalBench access check (Task 0, open).
+- `docs/calbench-notes.md` — CalBench access check (Task 0) — resolved
+  (real repo cloned and verified working; license/reuse terms still open).
