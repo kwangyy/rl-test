@@ -10,9 +10,10 @@ of the verdict (renormalised over the three labels).
 
     python stage0.py --model local --n 50
     python stage0.py --model qwen/qwen3.8-flash --n 50
+    python stage0.py --model local --n 900 --retrieval titles
     python stage0.py --summarize ../data/stage0/local_n50.jsonl
 
-Results are appended per claim to factcheck/data/stage0/<model>_n<N>.jsonl,
+Results are appended per claim to factcheck/data/stage0/<model>_n<N>[_titles].jsonl,
 and a rerun skips claims already in the file.
 """
 
@@ -75,10 +76,11 @@ def gold_sets(claim):
     return [{(e[2], e[3]) for e in s} for s in claim["evidence"]]
 
 
-def build_context(retriever, claims):
+def build_context(retriever, claims, retrieval="bm25"):
     """Per claim: the shown sentences as [(eid, page, line, text)] plus
-    retrieval diagnostics."""
-    pages = retriever.search([c["claim"] for c in claims], k=K_PAGES)
+    retrieval diagnostics. retrieval: "bm25" or "titles" (title match + BM25)."""
+    search = retriever.search_with_titles if retrieval == "titles" else retriever.search
+    pages = search([c["claim"] for c in claims], k=K_PAGES)
     out = []
     for c, ps in zip(claims, pages):
         shown = []
@@ -248,10 +250,10 @@ def score(claim, ctx, gen):
     }
 
 
-def run(model_name, n, chunk=20):
+def run(model_name, n, retrieval="bm25", chunk=20):
     from fever_retrieval import FeverRetriever
     os.makedirs(OUT_DIR, exist_ok=True)
-    path = os.path.join(OUT_DIR, f"{model_name.replace('/', '_')}_n{n}.jsonl")
+    path = os.path.join(OUT_DIR, f"{model_name.replace('/', '_')}_n{n}{'_titles' if retrieval == 'titles' else ''}.jsonl")
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -265,11 +267,11 @@ def run(model_name, n, chunk=20):
     t0 = time.time()
     for i in range(0, len(claims), chunk):
         batch = claims[i:i + chunk]
-        ctxs = build_context(retriever, batch)
+        ctxs = build_context(retriever, batch, retrieval)
         gens = model.run([render(c["claim"], x["shown"]) for c, x in zip(batch, ctxs)])
         with open(path, "a", encoding="utf-8") as f:
             for c, x, g in zip(batch, ctxs, gens):
-                f.write(json.dumps({"model": model.name, **score(c, x, g)}, ensure_ascii=False) + "\n")
+                f.write(json.dumps({"model": model.name, "retrieval": retrieval, **score(c, x, g)}, ensure_ascii=False) + "\n")
         print(f"  {i + len(batch)}/{len(claims)}  {time.time() - t0:.0f}s", flush=True)
     return path
 
@@ -333,11 +335,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="local", help='"local" or an OpenRouter model id')
     ap.add_argument("--n", type=int, default=50)
+    ap.add_argument("--retrieval", choices=["bm25", "titles"], default="bm25")
     ap.add_argument("--summarize", help="only print metrics for an existing results file")
     a = ap.parse_args()
     PRICES = {BIG_MODEL: (0.15, 0.47)}  # $/M tokens, OpenRouter 2026-09-19
     if a.summarize:
         summarize(a.summarize)
     else:
-        p = run(a.model, a.n)
+        p = run(a.model, a.n, a.retrieval)
         summarize(p, *PRICES.get(a.model, (None, None)))

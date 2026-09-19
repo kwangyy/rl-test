@@ -16,6 +16,7 @@ reliability bins).
 - [`docs/plan.md`](docs/plan.md) — architecture, what RL is for, the three stages, open decisions.
 - [`docs/related-work.md`](docs/related-work.md) — what is already published, what is open, numbers to beat.
 - [`docs/models.md`](docs/models.md) — which small model to train and which big model to call, with sizes and prices.
+- [`docs/stage0-results.md`](docs/stage0-results.md) — prompted baseline on 900 FEVER dev claims, 2B vs big model, BM25 vs title-match retrieval.
 - [`docs/original-proposal.md`](docs/original-proposal.md) — the source proposal, verbatim.
 
 ## Run
