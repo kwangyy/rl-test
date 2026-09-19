@@ -11,6 +11,13 @@ dataset loader must satisfy, the controller's states and actions, the
 reward terms, and the metrics (accuracy, evidence F1, abstention recall,
 reliability bins).
 
+## Docs
+
+- [`docs/plan.md`](docs/plan.md) — architecture, what RL is for, the three stages, open decisions.
+- [`docs/related-work.md`](docs/related-work.md) — what is already published, what is open, numbers to beat.
+- [`docs/models.md`](docs/models.md) — which small model to train and which big model to call, with sizes and prices.
+- [`docs/original-proposal.md`](docs/original-proposal.md) — the source proposal, verbatim.
+
 ## Run
 
 From the repo root, after the shared setup in the top-level README:
