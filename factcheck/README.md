@@ -18,6 +18,7 @@ reliability bins).
 - [`docs/related-work.md`](docs/related-work.md) — what is already published, what is open, numbers to beat.
 - [`docs/models.md`](docs/models.md) — which small model to train and which big model to call, with sizes and prices.
 - [`docs/stage0-results.md`](docs/stage0-results.md) — prompted baseline on 900 FEVER dev claims, 2B vs big model, BM25 vs title-match retrieval.
+- [`docs/sft-probe.md`](docs/sft-probe.md) — SFT capacity probe that decides 2B vs 4B before GRPO: design, commands, decision rule, results table.
 - [`docs/original-proposal.md`](docs/original-proposal.md) — the source proposal, verbatim.
 
 ## Run
@@ -35,6 +36,7 @@ python run_scaffold.py
 - `src/reward.py` — correctness + evidence F1 + calibration − cost, with an asymmetric harm matrix.
 - `src/verification_env.py` — Gymnasium MDP: retrieve / decompose / cross-check / abstain / commit at a stated confidence.
 - `src/run_scaffold.py` — random vs heuristic policy over 200 episodes, prints the metrics.
+- `src/sft_probe.py` — LoRA SFT on FEVER train with gold pages in context; evaluate the adapter with `stage0.py --adapter`.
 
 ## Known problems, not yet fixed
 

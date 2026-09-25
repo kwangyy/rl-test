@@ -56,9 +56,12 @@ VERDICT_PREFIX = re.compile(r'"verdict"\s*:\s*"')
 
 # ---------------------------------------------------------------- data
 
-def sample_claims(n, seed=SEED):
-    """n claims from FEVER dev, balanced across the three labels."""
-    with open(os.path.join(DATA, "shared_task_dev.jsonl"), encoding="utf-8") as f:
+SPLIT_FILE = {"dev": "shared_task_dev.jsonl", "train": "train.jsonl"}
+
+
+def sample_claims(n, seed=SEED, split="dev"):
+    """n claims from a FEVER split, balanced across the three labels."""
+    with open(os.path.join(DATA, SPLIT_FILE[split]), encoding="utf-8") as f:
         dev = [json.loads(line) for line in f]
     rng = random.Random(seed)
     out = []
@@ -76,11 +79,25 @@ def gold_sets(claim):
     return [{(e[2], e[3]) for e in s} for s in claim["evidence"]]
 
 
+def oracle_pages(claim, retrieved):
+    """Pages of the smallest gold evidence set, then title-match pages as
+    distractors, in a per-claim shuffled order so position carries no
+    signal. NEI claims (no gold) just get the retrieved pages."""
+    gs = gold_sets(claim)
+    gold = list(dict.fromkeys(p for p, _ in min(gs, key=len))) if gs else []
+    pages = list(dict.fromkeys(gold + list(retrieved)))[:K_PAGES]
+    random.Random(f"{SEED}-{claim['id']}").shuffle(pages)
+    return pages
+
+
 def build_context(retriever, claims, retrieval="bm25"):
     """Per claim: the shown sentences as [(eid, page, line, text)] plus
-    retrieval diagnostics. retrieval: "bm25" or "titles" (title match + BM25)."""
-    search = retriever.search_with_titles if retrieval == "titles" else retriever.search
+    retrieval diagnostics. retrieval: "bm25", "titles" (title match + BM25)
+    or "oracle" (gold pages guaranteed, title-match pages as distractors)."""
+    search = retriever.search if retrieval == "bm25" else retriever.search_with_titles
     pages = search([c["claim"] for c in claims], k=K_PAGES)
+    if retrieval == "oracle":
+        pages = [oracle_pages(c, ps) for c, ps in zip(claims, pages)]
     out = []
     for c, ps in zip(claims, pages):
         shown = []
@@ -154,15 +171,19 @@ def label_probs(tokens):
 # ---------------------------------------------------------------- models
 
 class LocalModel:
-    def __init__(self, name=LOCAL_MODEL, batch_size=4):
+    def __init__(self, name=LOCAL_MODEL, batch_size=4, adapter=None):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         self.torch = torch
         self.tok = AutoTokenizer.from_pretrained(name)
         self.tok.padding_side = "left"
         self.model = AutoModelForCausalLM.from_pretrained(name, dtype=torch.bfloat16, device_map="cuda")
+        if adapter:  # LoRA adapter from sft_probe.py, merged so generation is unchanged
+            from peft import PeftModel
+            self.model = PeftModel.from_pretrained(self.model, adapter).merge_and_unload()
+        self.model.eval()
         self.batch_size = batch_size
-        self.name = name
+        self.name = name if not adapter else f"{name}+{os.path.basename(os.path.normpath(adapter))}"
 
     def run(self, prompts):
         out = []
@@ -250,10 +271,17 @@ def score(claim, ctx, gen):
     }
 
 
-def run(model_name, n, retrieval="bm25", chunk=20):
+def run(model_name, n, retrieval="bm25", chunk=20, adapter=None):
+    """model_name: "local" (LOCAL_MODEL), "local:<hf id>" for another local
+    base, or an OpenRouter id. adapter: LoRA dir from sft_probe.py; its base
+    model is read from adapter_config.json unless "local:<hf id>" is given."""
     from fever_retrieval import FeverRetriever
     os.makedirs(OUT_DIR, exist_ok=True)
-    path = os.path.join(OUT_DIR, f"{model_name.replace('/', '_')}_n{n}{'_titles' if retrieval == 'titles' else ''}.jsonl")
+    tag = model_name.replace("/", "_").replace(":", "_")
+    if adapter:
+        tag += "+" + os.path.basename(os.path.normpath(adapter))
+    suffix = "" if retrieval == "bm25" else f"_{retrieval}"
+    path = os.path.join(OUT_DIR, f"{tag}_n{n}{suffix}.jsonl")
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -262,7 +290,14 @@ def run(model_name, n, retrieval="bm25", chunk=20):
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if not claims:
         return path
-    model = LocalModel() if model_name == "local" else OpenRouterModel(model_name)
+    if model_name.startswith("local"):
+        base = model_name.split(":", 1)[1] if ":" in model_name else None
+        if adapter and not base:
+            with open(os.path.join(adapter, "adapter_config.json"), encoding="utf-8") as f:
+                base = json.load(f)["base_model_name_or_path"]
+        model = LocalModel(base or LOCAL_MODEL, adapter=adapter)
+    else:
+        model = OpenRouterModel(model_name)
     retriever = FeverRetriever()
     t0 = time.time()
     for i in range(0, len(claims), chunk):
@@ -333,14 +368,15 @@ def summarize(path, cost_in=None, cost_out=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="local", help='"local" or an OpenRouter model id')
+    ap.add_argument("--model", default="local", help='"local", "local:<hf id>", or an OpenRouter model id')
     ap.add_argument("--n", type=int, default=50)
-    ap.add_argument("--retrieval", choices=["bm25", "titles"], default="bm25")
+    ap.add_argument("--retrieval", choices=["bm25", "titles", "oracle"], default="bm25")
+    ap.add_argument("--adapter", help="LoRA adapter dir from sft_probe.py (local models only)")
     ap.add_argument("--summarize", help="only print metrics for an existing results file")
     a = ap.parse_args()
     PRICES = {BIG_MODEL: (0.15, 0.47)}  # $/M tokens, OpenRouter 2026-09-19
     if a.summarize:
         summarize(a.summarize)
     else:
-        p = run(a.model, a.n, a.retrieval)
+        p = run(a.model, a.n, a.retrieval, adapter=a.adapter)
         summarize(p, *PRICES.get(a.model, (None, None)))
