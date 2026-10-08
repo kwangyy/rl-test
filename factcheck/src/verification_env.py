@@ -42,6 +42,9 @@ COMMITS = {
     6: (REFUTED, 0.9),
     7: (REFUTED, 0.4),
 }
+# Confidence is "chance this verdict is right" (Brier, reward.py), so an
+# abstain states a middling belief that NEI is right, not 0.
+ABSTAIN_CONF = 0.5
 
 
 class ClaimVerificationEnv(gym.Env):
@@ -119,21 +122,25 @@ class ClaimVerificationEnv(gym.Env):
         elif action == CROSS_CHECK:
             self._cross_check()
         else:
-            pred, conf = (NEI, 0.0) if action == ABSTAIN else COMMITS[action]
+            pred, conf = (NEI, ABSTAIN_CONF) if action == ABSTAIN else COMMITS[action]
             return self._finish(pred, conf)
 
-        if self.n_ops >= MAX_OPS:  # budget exhausted -> forced low-confidence abstain
-            return self._finish(NEI, 0.0)
+        if self.n_ops >= MAX_OPS:  # budget exhausted -> forced abstain
+            return self._finish(NEI, ABSTAIN_CONF)
         return self._obs(), 0.0, False, False, {}
 
     def _finish(self, pred: str, conf: float):
-        r, parts = R.total(self.gold, pred, conf, self.gold_ids, self.cited, self.n_ops)
+        # Abstaining says nothing gathered settles the claim, so it cites
+        # nothing; otherwise retrieving before a correct abstain would be
+        # penalised by the NEI evidence rule.
+        cited = [] if pred == NEI else list(self.cited)
+        r, parts = R.total(self.gold, pred, conf, self.gold_ids, cited, self.n_ops)
         info = {
             "claim": self.claim,
             "gold": self.gold,
             "pred": pred,
             "confidence": conf,
-            "cited": list(self.cited),
+            "cited": cited,
             "correct": self.gold == pred,
             "decomposed": self.decomposed,
             "is_compound": self.is_compound,
