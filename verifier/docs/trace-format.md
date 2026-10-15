@@ -81,3 +81,18 @@ budget left) are all derivable from the steps, so they are not stored twice.
   self-contained for the demo and the failure audit (about 1 KB per hit).
 - **Sentence ids are `line`**, FEVER's line number on the page, the same
   as `eval_verifier.py` and `pages.sqlite`. A hit is `{page, line, text, score}`.
+
+## Schema 2 (2026-10-15): prompted controller
+
+Added for `agent/prompted.py`, where a big model picks the actions. Schema 1
+rows (the fixed policy) stay valid; every field below is an addition.
+
+- `run.controller`, `run.max_steps`: the controller model and the action budget.
+- `steps[].controller`: the controller call that chose this step:
+  `text` (raw reply), `valid` (false when the reply was unusable and the loop
+  fell back to search, then verify, then commit), `tokens_in`, `tokens_out`,
+  `seconds`. A `decompose` step also has `decompose_tokens_in` / `_out`.
+- `steps[].args.subclaim` on `verify`: index into the preceding `decompose`
+  result, or null when the full claim was verified.
+- `cost.n_controller`, `cost.controller_tokens_in`, `cost.controller_tokens_out`.
+  `cost.tokens_in` / `tokens_out` are verifier plus controller.
