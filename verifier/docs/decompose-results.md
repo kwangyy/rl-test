@@ -58,14 +58,50 @@ causes, from reading the breaks:
    "Only" / "exclusively" claims split into a weak positive and a negative
    the verifier cannot judge.
 
+## Fixing retrieval, context and the combine (second run)
+
+Two causes above were measured from the traces before trying fixes:
+rewording is a minor one (on sub-claims that use only the claim's own words,
+`each` still loses 5 points), while in 21% of split claims at least one
+sub-claim's own search misses every gold page (all sub-claim searches
+together miss only as often as the full claim's search). Three fixes:
+
+- **each-pooled**: every sub-claim is verified on a 5-page union of the full
+  claim's search and all sub-claim searches, so no sub-claim is left without
+  the right page.
+- **each-pooled-ctx**: as each-pooled, and the verifier sees
+  `(This is one part of the claim: "<claim>")` after the sub-claim.
+- **Soft combine** (scored on every `each*` trace, no extra GPU):
+  P(SUPPORTED) = prod P_S, P(REFUTED) = 1 - prod(1 - P_R), NEI the rest.
+
+| | full | each | pool | each-pooled | each-pooled-ctx |
+|---|---|---|---|---|---|
+| Label accuracy | **0.735** | 0.642 | 0.717 | 0.654 | 0.663 |
+| Soft combine | | 0.633 | | 0.639 | 0.675 |
+| FEVER score | **0.630** | 0.551 | 0.620 | 0.557 | 0.569 |
+| Recall SUPPORTED | **0.838** | 0.646 | 0.747 | 0.707 | 0.707 |
+| Recall REFUTED | **0.720** | 0.627 | **0.720** | 0.644 | 0.678 |
+| Recall NEI | 0.661 | 0.652 | **0.687** | 0.617 | 0.609 |
+| Searches / claim | 1.00 | 2.13 | 2.13 | 3.13 | 3.13 |
+| Verifies / claim | 1.00 | 2.13 | 1.00 | 2.13 | 2.13 |
+| vs full: fixes / breaks | | 21 / 52 | 8 / 14 | 16 / 43 | 16 / 40 |
+
+All three fixes together recover 3 of the 9 points (0.675 at best) and
+still lose 6 to verifying the whole claim, at 2.4x the tokens. Since
+each-pooled shows the verifier the same pages as `full` plus more, the
+remaining gap is the split itself: the 2B verifier judges the whole claim
+better than it judges its pieces, and any combine of piece-wise verdicts
+compounds their errors.
+
 ## What this means
 
 - Keep `decompose` as a controller action, but not in any fixed policy. A
   learned controller (RL-3) should find it rarely pays; that is a useful
   result for the accuracy-vs-cost story, not a bug.
-- If decomposition is revisited: keep the original claim as context in each
-  sub-claim's search and verify, forbid splitting negations and
-  "only"-claims, and combine with confidence rather than a hard AND.
+- Retrieval, context and a soft combine were tried and close only a third
+  of the gap (section above). Better decomposition alone is unlikely to make
+  it pay with this verifier; revisit only if the verifier is trained on
+  sub-claims, or with a much stronger verifier.
 - Traces for RL-3's offline env:
-  `verifier/data/traces/fever_dev_decompose-{each,pool}-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_n900.jsonl`
+  `verifier/data/traces/fever_dev_decompose-{each,pool,each-pooled,each-pooled-ctx}-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_n900.jsonl`
   (332 rows each, schema 2).
