@@ -94,5 +94,15 @@ rows (the fixed policy) stay valid; every field below is an addition.
   `seconds`. A `decompose` step also has `decompose_tokens_in` / `_out`.
 - `steps[].args.subclaim` on `verify`: index into the preceding `decompose`
   result, or null when the full claim was verified.
-- `cost.n_controller`, `cost.controller_tokens_in`, `cost.controller_tokens_out`.
-  `cost.tokens_in` / `tokens_out` are verifier plus controller.
+- `cost.n_controller`, `cost.controller_tokens_in`, `cost.controller_tokens_out`:
+  every big-model token, controller and decomposer alike. `cost.tokens_in` /
+  `tokens_out` are verifier plus big model. Decompositions come from a cache
+  (`agent/decompose.py`) but are charged the tokens of the original call, so
+  cost does not depend on whether the cache was warm.
+- `run.decomposer`: the big model behind `decompose`, on runs that decompose.
+  The fixed decompose policies (`decompose-each`, `decompose-pool`, from
+  `agent/eval_decompose.py`) have `run.controller: null` and no
+  `steps[].controller`.
+- A `verify` step's verdict can be judged on a sub-claim. The episode's
+  `final` then combines them: any REFUTED refutes, all SUPPORTED supports,
+  otherwise NOT_ENOUGH_INFO.

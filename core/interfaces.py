@@ -41,3 +41,12 @@ class Verify(Protocol):
         prompt (untrained baseline's E1..En numbering is internal to it); the caller only
         ever sees global "page:line" ids.
         """
+
+
+class Decompose(Protocol):
+    def __call__(self, claim: str) -> list[str]:
+        """Sub-claims that are all true exactly when the claim is true.
+
+        Added 2026-10-15 for the agent loop's `decompose` action (AG-2). A claim
+        that is already simple comes back as [claim], never as [].
+        """

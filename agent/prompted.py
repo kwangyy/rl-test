@@ -24,10 +24,10 @@ tokens. Reruns skip claims already in the file.
 import argparse
 import json
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from agent.decompose import BigModel, Decomposer, cache_path, first_json
 from agent.agent_loop import (NEI, REWARD_LABEL, TRACE_DIR, FeverSearch, LocalVerify, report,
                               reward_version)
 from core import reward as R
@@ -38,7 +38,6 @@ SCHEMA = 2
 K = K_PAGES * MAX_SENTS_PER_PAGE  # sentences per search, as the fixed policy
 MAX_POOL = K  # sentences the verifier sees at once, as the fixed policy
 MAX_STEPS = 8  # actions before the episode is cut off (ended_by "budget")
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
 CONTROLLER_SYSTEM = """You control a fact-checking agent. Your job is to reach a verdict on a claim
 (SUPPORTED, REFUTED or NOT_ENOUGH_INFO) using Wikipedia, at the lowest cost.
@@ -59,51 +58,6 @@ Every action costs. Search, then verify. Commit when the verifier is confident a
 its cited evidence is on topic. Search again with a better query when the pages
 found are about the wrong entity or the verifier cites nothing. Abstain when
 repeated searches cannot find relevant pages."""
-
-DECOMPOSE_SYSTEM = """Split a factual claim into the smallest set of simpler sub-claims that are
-all true exactly when the claim is true. A claim that is already simple stays as one.
-Reply with a JSON list of strings and nothing else."""
-
-
-def load_env():
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(ROOT, ".env"))
-    except ImportError:
-        pass
-
-
-class BigModel:
-    """Text-in, text-out calls to the controller model on OpenRouter."""
-
-    def __init__(self, name=BIG_MODEL, max_tokens=200):
-        from openai import OpenAI
-        load_env()
-        self.client = OpenAI(base_url="https://openrouter.ai/api/v1",
-                             api_key=os.environ["OPENROUTER_API_KEY"], max_retries=3)
-        self.name = name
-        self.max_tokens = max_tokens
-
-    def __call__(self, system, user):
-        r = self.client.chat.completions.create(
-            model=self.name, temperature=0, seed=SEED, max_tokens=self.max_tokens,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            extra_body={"reasoning": {"enabled": False}},
-        )
-        return {"text": r.choices[0].message.content or "",
-                "in_tokens": r.usage.prompt_tokens, "out_tokens": r.usage.completion_tokens}
-
-
-def first_json(text, kind):
-    m = re.search(r"\{.*\}" if kind is dict else r"\[.*\]", text, re.S)
-    if not m:
-        return None
-    try:
-        obj = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
-    return obj if isinstance(obj, kind) else None
-
 
 class Episode:
     """One claim's state while the controller acts on it."""
@@ -180,7 +134,7 @@ def decide(ep, big):
     return obj, ctl
 
 
-def run_chunk(claims, search, verify, big, run_info, workers=8):
+def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8):
     eps = [Episode(c) for c in claims]
     texts = {}  # "page:line" -> sentence, shared so observations can quote cited evidence
     for ep in eps:
@@ -212,15 +166,13 @@ def run_chunk(claims, search, verify, big, run_info, workers=8):
         if decomps:
             def split(ep):
                 t0 = time.time()
-                g = big(DECOMPOSE_SYSTEM, ep.c["claim"])
-                subs = [s for s in (first_json(g["text"], list) or []) if isinstance(s, str) and s.strip()]
-                return subs or [ep.c["claim"]], g, time.time() - t0
-            for (ep, a, c), (subs, g, s) in zip(decomps, pool.map(lambda x: split(x[0]), decomps)):
-                ep.subclaims = subs
-                ep.ctl_in += g["in_tokens"]
-                ep.ctl_out += g["out_tokens"]
-                ep.log("decompose", {"claim": ep.c["claim"]}, {"subclaims": subs}, s,
-                       {**c, "decompose_tokens_in": g["in_tokens"], "decompose_tokens_out": g["out_tokens"]})
+                return decomposer.run(ep.c["claim"]), time.time() - t0
+            for (ep, a, c), (g, s) in zip(decomps, pool.map(lambda x: split(x[0]), decomps)):
+                ep.subclaims = g["subclaims"]
+                ep.ctl_in += g["tokens_in"]
+                ep.ctl_out += g["tokens_out"]
+                ep.log("decompose", {"claim": ep.c["claim"]}, {"subclaims": g["subclaims"]}, s,
+                       {**c, "decompose_tokens_in": g["tokens_in"], "decompose_tokens_out": g["tokens_out"]})
 
         verifies = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "verify"]
         if verifies:
@@ -250,8 +202,12 @@ def run_chunk(claims, search, verify, big, run_info, workers=8):
 
 
 def combine(sub_verdicts, n):
-    """Verdict on the claim from its sub-claims: any refuted refutes, all supported supports."""
+    """Verdict on the claim from its sub-claims: any refuted refutes, all supported supports,
+    anything else (a sub-claim unverified, NOT_ENOUGH_INFO or unparsable) is NOT_ENOUGH_INFO.
+    None only when no sub-claim was verified at all."""
     vs = [sub_verdicts.get(i) for i in range(n)]
+    if not any(vs):
+        return None
     got = [v for v in vs if v and v["verdict"]]
     refuted = [v for v in got if v["verdict"] == "REFUTED"]
     if refuted:
@@ -263,7 +219,8 @@ def combine(sub_verdicts, n):
         for v in got:
             conf *= v["confidence"] or 0
         return {"verdict": "SUPPORTED", "evidence": ev, "confidence": conf}
-    return None
+    nei = [v["token_prob"].get(NEI) for v in vs if v and v.get("token_prob")]
+    return {"verdict": NEI, "evidence": [], "confidence": max(nei) if nei else None}
 
 
 def final_answer(ep):
@@ -352,13 +309,14 @@ if __name__ == "__main__":
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
         big = BigModel(a.controller)
+        decomposer = Decomposer(big, cache_path(big.name, a.n))
         search = FeverSearch()
         verify = LocalVerify(search, a.model, a.adapter)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
                     "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS}
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):
-            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, run_info)
+            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info)
             with open(path, "a", encoding="utf-8") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
