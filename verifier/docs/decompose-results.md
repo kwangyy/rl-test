@@ -87,11 +87,13 @@ together miss only as often as the full claim's search). Three fixes:
 | vs full: fixes / breaks | | 21 / 52 | 8 / 14 | 16 / 43 | 16 / 40 |
 
 All three fixes together recover 3 of the 9 points (0.675 at best) and
-still lose 6 to verifying the whole claim, at 2.4x the tokens. Since
-each-pooled shows the verifier the same pages as `full` plus more, the
-remaining gap is the split itself: the 2B verifier judges the whole claim
-better than it judges its pieces, and any combine of piece-wise verdicts
-compounds their errors.
+still lose 6 to verifying the whole claim, at 2.4x the tokens. each-pooled
+gives every sub-claim the full claim's top page and the sub-claims' own top
+pages (5 pages in all, so not a strict superset of `full`'s), and `pool`,
+verifying the whole claim on such a union, loses only 2 points. Most of the
+remaining gap is therefore the split itself: the 2B verifier judges the
+whole claim better than it judges its pieces, and any combine of piece-wise
+verdicts compounds their errors.
 
 ## What this means
 
