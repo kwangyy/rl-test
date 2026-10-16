@@ -45,13 +45,9 @@ set, matched by `(page, line)`. For example, dev hybrid @5 = 0.795 means **477 o
 - **Dev:** 600 non-NEI claims from the frozen 900-ID development manifest; the other 300 are excluded because NEI has no gold evidence for this metric.
 - **ms/claim:** average retrieval time, excluding title-index initialization; hybrid includes its first model load. Timing varies by run.
 
-Methods use the same claims within each split and the same five-page candidate
-pool. **Dev is already used development data, not an untouched final test.**
-Calibration and holdout were not evaluated.
-
 ## Observations
 
-- **Keep title matching + page BM25 with five candidate pages.** It consistently beats plain page BM25.
+- **Keep title matching + page BM25.** Five candidate pages remains the practical setting for small sentence budgets; see the candidate-page comparison below.
 - **Test sentence BM25 at k=20 as the practical choice.** It returns one-third fewer sentences than k=30, losing only 1.3–1.5 percentage points of evidence coverage.
 - **Test hybrid at k=10 when shorter context matters.** It returns half as many sentences as BM25 k=20 with coverage within 0.7 points, but retrieval took about **4.6× longer**.
 - **Do not adopt k=3 yet:** even hybrid covers complete evidence for only about 70–74% of claims.
@@ -60,6 +56,69 @@ Calibration and holdout were not evaluated.
 prompt, keeping BM25 k=30 as the reference. Measure **verdict accuracy and total
 cost** before changing tool defaults. Retrieval coverage alone does not establish
 the best k for verification.
+
+## Candidate-page budget — 5 vs 10 vs 20
+
+Using the same **600 non-NEI frozen dev claims**
+(300 SUPPORTS / 300 REFUTES). Change only `candidate_pages`; compare each column
+at the **same final sentence k**. Both rankers retain titles, shared tokenization
+and all candidate sentences. Page selection still prefers up to three title
+matches, then fills the page budget with page BM25. This is retrieval coverage,
+with no verifier inference and no calibration/holdout use.
+
+| Candidate pages | Ranker | @3 | @5 | @10 | @20 | @30 | ms/claim |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 5 | BM25 | 0.590 | 0.697 | 0.795 | 0.852 | 0.867 | 44 |
+| 5 | Hybrid | 0.735 | 0.795 | 0.848 | 0.865 | 0.873 | 167 |
+| 10 | BM25 | 0.525 | 0.635 | 0.732 | 0.840 | 0.875 | 52 |
+| 10 | Hybrid | 0.717 | 0.788 | 0.847 | 0.880 | 0.892 | 329 |
+| 20 | BM25 | 0.468 | 0.565 | 0.690 | 0.795 | 0.838 | 42 |
+| 20 | Hybrid | 0.693 | 0.755 | 0.840 | 0.885 | 0.893 | 506 |
+
+**More evidence becomes available before ranking:** the following ceiling is
+complete-set recall if every numbered sentence in the candidate pages could be
+returned. It is an upper bound, not actual top-k performance.
+
+| Candidate pages | Candidate-pool ceiling | Mean candidate sentences |
+|---:|---:|---:|
+| 5 | 0.873 | 32 |
+| 10 | 0.898 | 54 |
+| 20 | 0.912 | 97 |
+
+- **Wider pools do not solve the k=3 problem:** five-page hybrid remains best,
+  covering 73.5%; ten and twenty pages reduce it to 71.7% and 69.3%.
+- **At k=10, keep five pages:** hybrid coverage is 84.8% / 84.7% / 84.0% for
+  5 / 10 / 20 pages. Ten pages helps 13 previously missed claims but loses 14
+  previously covered ones; nearly equal averages hide different failures.
+- **At k=30, ten pages is the useful wider-pool option:** hybrid rises from
+  87.3% to 89.2% (+11 covered claims), at roughly twice the retrieval time.
+  Twenty pages reaches 89.3%: only one additional claim, with 54% more time
+  than ten pages. These are single dev runs, not a demonstrated population gain.
+- **Page availability is only one bottleneck.** The pool ceiling rises, but
+  sentence ranking must still select the evidence. Wider pools introduce more
+  competing sentences and change BM25's pool-dependent term statistics; plain
+  sentence BM25 performs substantially worse at small k. A larger pool should
+  not be enabled solely because its ceiling is higher.
+
+Times are sequential CPU measurements from the unchanged sentence evaluator,
+including page retrieval and the first MiniLM load for each hybrid run,
+excluding title-index initialization. They measure retrieval at maximum k=30;
+there were no repeated timing trials, and cache/system effects can vary.
+
+### Reproduce this comparison
+
+Run from the repository root; use the project Python environment and a **new
+run directory**. `--claim-ids` supplies all 600 non-NEI development claims;
+`--n` is not needed.
+
+```bash
+for pages in 5 10 20; do
+  python -m retrieval.eval_sentence_retrieval \
+    --claim-ids verifier/data/eval/fever-dev-900-ids.json \
+    --candidate-pages "$pages" --hybrid \
+    --output "retrieval/results/candidate-pages-dev/run2/p${pages}.json"
+done
+```
 
 ## Run the tests
 
