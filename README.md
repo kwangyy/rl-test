@@ -15,7 +15,7 @@ This repository studies evidence-grounded claim verification on FEVER. A verifie
 | [`verifier/TODO.md`](verifier/TODO.md) | Current priorities and experiment checklist |
 | [`verifier/docs/`](verifier/docs/) | Data guide, experiment results, architecture and background |
 | [`verifier/data/train/`](verifier/data/train/) | Committed SFT and GRPO training examples |
-| [`verifier/data/eval/`](verifier/data/eval/) | Frozen FEVER dev claim IDs |
+| [`verifier/data/eval/`](verifier/data/eval/) | Development, calibration and holdout IDs; usage audit |
 | [`verifier/experiments/`](verifier/experiments/) | SFT and GRPO training configurations |
 | [`verifier/evaluation/`](verifier/evaluation/) | Shared evaluator, Slurm launcher and `results/` |
 | [`retrieval/`](retrieval/) | FEVER index and search code |
@@ -66,7 +66,10 @@ The verifier fine-tunes `Qwen/Qwen3.5-2B` with LoRA (rank 16) to produce structu
 
 ### 3. Verifier Evaluation & Scoring
 
-Evaluates claim verification on frozen dev claim sets (default 900 claims with title retrieval):
+Evaluation defaults to the historical 900-claim development benchmark with title retrieval. The shared verifier/agent splits also reserve 900 calibration claims for confidence adjustments and 3,000 holdout claims for final comparisons, each balanced by label. Finalize prompts, policies and checkpoints on development data before using holdout. See [split policy, audit and check commands](verifier/docs/data.md#6-frozen-development-calibration-and-holdout-sets).
+
+To evaluate a full set, pass `--claim-ids <ID-file>` (or `CLAIM_IDS=<ID-file>` for the evaluation Slurm launcher). This overrides `--n` / `N_CLAIMS`.
+
 - **Prompt Styles**:
   - `direct`: Output concise JSON directly.
   - `cot_brief`: Output concise evidence reasoning (<=50 words) within the JSON object.

@@ -35,6 +35,7 @@ from agent.decompose import Decomposer, cache_path
 from agent.prompted import NEI, Episode, to_row
 from verifier.model import (BIG_MODEL, K_PAGES, LABELS, LOCAL_MODEL, MAX_SENTS_PER_PAGE, SEED, adapter_label,
                             sample_claims)
+from utils.fever_eval import manifest_metadata, manifest_tag, validate_resume_ids
 
 K = K_PAGES * MAX_SENTS_PER_PAGE
 POLICIES = ["each", "pool", "each-pooled", "each-pooled-ctx"]
@@ -178,33 +179,45 @@ if __name__ == "__main__":
     ap.add_argument("--model", default=LOCAL_MODEL)
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--decomposer", default=BIG_MODEL)
-    ap.add_argument("--full", required=True, help="trace of the fixed policy with the same verifier, n=--n")
+    ap.add_argument("--full", required=True, help="fixed-policy trace with the same verifier and selected claim IDs")
     ap.add_argument("--policies", default=",".join(POLICIES))
-    ap.add_argument("--n", type=int, default=900)
+    ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
     a = ap.parse_args()
+    selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                             ids_file=a.claim_ids)
+    a.n = len(selected)
+    full = load(a.full)
+    if set(full) != {c["id"] for c in selected}:
+        raise SystemExit("--full must contain every ID from the same selected evaluation set")
 
-    cache = cache_path(a.decomposer, a.n)
+    cache = cache_path(a.decomposer, a.n, claim_ids=a.claim_ids)
     if not os.path.exists(cache):
-        raise SystemExit(f"no decomposer cache at {cache}; run python -m agent.decompose --n {a.n} first")
+        raise SystemExit(f"no decomposer cache at {cache}; run python -m agent.decompose with the same --claim-ids/--n selection first")
     decomp = Decomposer(cache=cache)
-    claims = [c for c in sample_claims(a.n, SEED) if len(decomp(c["claim"])) > 1]
+    if any(c["claim"] not in decomp.cache for c in selected):
+        raise SystemExit("cache is incomplete; rerun python -m agent.decompose with the same selection")
+    claims = [c for c in selected if len(decomp(c["claim"])) > 1]
     if any(not d["cached"] for d in map(decomp.run, (c["claim"] for c in claims))):
         raise SystemExit("cache is incomplete; rerun python -m agent.decompose")
 
     policies = a.policies.split(",")
     suffix = (adapter_label(a.adapter) if a.adapter else "base") + (f"_{a.tag}" if a.tag else "")
     suffix += f"_{a.method}-p{K_PAGES}-k{K}"
+    suffix += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
     paths = {p: os.path.join(TRACE_DIR, f"fever_dev_decompose-{p}-{suffix}_n{a.n}.jsonl") for p in policies}
     want = {c["id"] for c in claims}
+    for path in paths.values():
+        validate_resume_ids(load(path), want)
     todo_p = [p for p in policies if not want <= set(load(paths[p]))]
     print(f"{len(claims)} split claims; to run: {', '.join(todo_p) or 'nothing'}")
     if todo_p:
         search = FeverSearch(method=a.method)
         verify = LocalVerify(search, a.model, a.adapter)
         base = {"controller": None, "decomposer": decomp.name, "verifier": verify.name,
-                "reward_version": reward_version(), "seed": SEED, "search_method": a.method}
+                "reward_version": reward_version(), "seed": SEED, "search_method": a.method, **manifest_metadata(a.claim_ids)}
         for p in todo_p:
             done = set(load(paths[p]))
             todo = [c for c in claims if c["id"] not in done]
@@ -217,6 +230,6 @@ if __name__ == "__main__":
                         f.write(json.dumps(r, ensure_ascii=False) + "\n")
                 print(f"  {p}: {i + len(rows)}/{len(todo)}  {time.time() - t0:.0f}s", flush=True)
 
-    runs = {"full": load(a.full), **{p: load(paths[p]) for p in policies}}
+    runs = {"full": full, **{p: load(paths[p]) for p in policies}}
     ids = [c["id"] for c in claims if all(c["id"] in r for r in runs.values())]
     compare(runs, ids)

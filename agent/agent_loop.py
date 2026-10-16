@@ -29,6 +29,8 @@ import subprocess
 import sys
 import time
 
+from utils.fever_eval import manifest_metadata, manifest_tag, validate_resume_ids
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 from core import reward as R
@@ -141,7 +143,8 @@ def run_chunk(claims, search, verify, run_info, search_k=None):
                                gold_ids, res["evidence"], n_ops)
             reward = {"total": r, "parts": parts}
         rows.append({
-            "schema": SCHEMA, "id": c["id"], "dataset": "fever", "split": "dev",
+            "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
+            "id": c["id"], "dataset": "fever", "split": "dev",
             "claim": c["claim"], "gold": gold,
             "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
             "run": run_info,
@@ -195,7 +198,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=LOCAL_MODEL)
     ap.add_argument("--adapter", default=None, help="LoRA dir(s), as eval_verifier.py --adapter")
-    ap.add_argument("--n", type=int, default=900)
+    ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
     ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
@@ -204,11 +208,15 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.search_k < 1 or a.candidate_pages < 1:
         ap.error("search-k and candidate-pages must be positive")
+    selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                             ids_file=a.claim_ids)
+    a.n = len(selected)
 
     run = "fixed-" + (adapter_label(a.adapter) if a.adapter else "base")
     run += f"_{a.tag}" if a.tag else ""
     search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
     run += f"_{search_tag}"
+    run += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
     os.makedirs(TRACE_DIR, exist_ok=True)
     path = os.path.join(TRACE_DIR, f"fever_dev_{run}_n{a.n}.jsonl")
     eval_tag = "local" + (f"+{adapter_label(a.adapter)}" if a.adapter else "")
@@ -217,13 +225,16 @@ if __name__ == "__main__":
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
-    claims = [c for c in sample_claims(a.n, SEED) if c["id"] not in done]
+            done_ids = [json.loads(line)["id"] for line in f]
+            validate_resume_ids(done_ids, [c["id"] for c in selected])
+            done = set(done_ids)
+    claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
         search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
-        run_info = {"policy": "fixed", "verifier": verify.name, "reward_version": reward_version(), "seed": SEED}
+        run_info = {"policy": "fixed", "verifier": verify.name, "reward_version": reward_version(),
+                    "seed": SEED, **manifest_metadata(a.claim_ids)}
         run_info["policy"] = f"fixed-{search_tag}"
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):

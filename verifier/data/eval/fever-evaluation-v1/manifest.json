@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "name": "fever-evaluation-v1",
+  "seed": 0,
+  "sampling": "Sort dev by ID; exclude all recorded usage and normalized text matches to the full official train pool or used claims; deduplicate candidates; shuffle each label with Random(0); allocate 300 calibration then 1000 holdout per label; shuffle each set.",
+  "normalization": "Unicode NFKC, casefold and whitespace collapse, compared directly during selection only. No per-claim hashes are stored. Near-duplicates and entity/page-disjointness are not claimed.",
+  "sources": {
+    "train": {
+      "path": "verifier/data/fever/train.jsonl",
+      "count": 145449,
+      "sha256": "eba7e8f87076753f8494718b9a857827af7bf73e76c9e4b75420207d26e588b6"
+    },
+    "dev": {
+      "path": "verifier/data/fever/shared_task_dev.jsonl",
+      "count": 19998,
+      "sha256": "e89865bfe1b4dd054e03dd57d7241a6fde24862905f31117cf0cd719f7c78df7"
+    }
+  },
+  "legacy_development": {
+    "path": "verifier/data/eval/fever-dev-900-ids.json",
+    "count": 900,
+    "sha256": "ac9cfead07deb410991d594024e4d5f67165d754dccd87a58c3731761af8eb7e"
+  },
+  "audit": {
+    "path": "usage-audit.json",
+    "sha256": "105f1cf92a724f4a7aa59efc6bfa6ce4084abc6f62e7ba5b94bed38bb763acbf"
+  },
+  "selection": {
+    "eligible": 18648,
+    "excluded": {
+      "previously_used_id": 945,
+      "duplicate_candidate_text": 358,
+      "training_or_used_text_match": 47
+    }
+  },
+  "sets": {
+    "development-used-ids.json": {
+      "role": "development",
+      "count": 945,
+      "sha256": "397030762d5bdc2ee1a1e4829d0b3506899264eb40bb1cac3b67d004fa46a1c6"
+    },
+    "calibration-900-ids.json": {
+      "role": "calibration",
+      "count": 900,
+      "sha256": "76cc6039899f471f896ddbc509fdfab6140285c1ade7be1933d1d7ee74da5e85"
+    },
+    "holdout-3000-ids.json": {
+      "role": "holdout",
+      "count": 3000,
+      "sha256": "4529c3609eec5dc6f4699d884c022dae9108f08afe2620b47f667564cc5ea560"
+    }
+  },
+  "policy": {
+    "training": "Keep official train available for verifier and controller training; never train on calibration or holdout IDs. Runtime leakage guards compare FEVER IDs.",
+    "development": "Keep the historical 900 unchanged. Previously inspected dev claims remain development data, including smoke-test extras.",
+    "calibration": "Fit confidence adjustments only; do not use for verifier/controller weights or policy/prompt selection.",
+    "holdout": "Evaluate finalized configurations only; no training, teacher-target generation, prompt tuning, or failure-driven policy changes. If used for development, retire/version this holdout.",
+    "scope": "Unused in available project records at freeze time; no guarantee about unrecorded external runs or pretrained-model exposure.",
+    "labels": "Class-balanced evaluation; report this sampling scheme, since precision and calibration depend on class prevalence."
+  }
+}

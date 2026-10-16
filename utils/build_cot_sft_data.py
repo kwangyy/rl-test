@@ -111,6 +111,7 @@ def request_for(row, provider="gemini", model=None):
 
 
 def prepare(args):
+    from utils.fever_eval import assert_not_reserved
     if args.per_class < 0:
         raise ValueError("per_class must be nonnegative")
     if args.provider == "soclaas" and not args.model:
@@ -119,6 +120,7 @@ def prepare(args):
     source_bytes = Path(args.source).read_bytes()
     source = read_jsonl(args.source)
     chosen = select_rows(source, args.per_class, args.seed)
+    assert_not_reserved(chosen, "teacher-target generation")
     ids = [str(row["id"]) for row in chosen]
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate claim IDs in selected rows")

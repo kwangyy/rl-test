@@ -30,6 +30,8 @@ import time
 sys.stdout.reconfigure(encoding="utf-8")
 
 from core.reward import evidence_f1
+from utils.fever_eval import (LEGACY_IDS, assert_not_reserved, load_manifest_claims,
+                             manifest_metadata, manifest_tag, validate_resume_ids)
 
 DATA = os.path.join(os.path.dirname(__file__), "data", "fever")
 
@@ -113,8 +115,16 @@ def adapter_label(path):
 SPLIT_FILE = {"dev": "shared_task_dev.jsonl", "train": "train.jsonl"}
 
 
-def sample_claims(n, seed=SEED, split="dev"):
-    """n claims from a FEVER split, balanced across the three labels."""
+def sample_claims(n, seed=SEED, split="dev", ids_file=None):
+    """Use every explicit manifest ID, or sample n claims balanced by label."""
+    source = os.path.join(DATA, SPLIT_FILE[split])
+    if ids_file is not None:
+        if split != "dev":
+            raise ValueError("explicit evaluation claim IDs require the dev split")
+        return load_manifest_claims(source, ids_file)
+    # Preserve the historical benchmark by ID, independent of raw-file ordering.
+    if split == "dev" and n == 900 and seed == SEED:
+        return load_manifest_claims(source, LEGACY_IDS)
     with open(os.path.join(DATA, SPLIT_FILE[split]), encoding="utf-8") as f:
         dev = [json.loads(line) for line in f]
     rng = random.Random(seed)
@@ -123,6 +133,7 @@ def sample_claims(n, seed=SEED, split="dev"):
         pool = [c for c in dev if c["label"] == label]
         out += rng.sample(pool, n // 3 + (1 if i < n % 3 else 0))
     rng.shuffle(out)
+    assert_not_reserved(out, f"implicit FEVER {split} sampling")
     return out
 
 
@@ -346,11 +357,14 @@ def score(claim, ctx, gen, require_confidence=True):
 
 
 def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
-        prompt_style="direct", max_new_tokens=None):
+        prompt_style="direct", max_new_tokens=None, claim_ids=None):
     """model_name: "local" (LOCAL_MODEL), "local:<hf id>" for another local
     base, or an OpenRouter id. adapter: LoRA checkpoint dir from an SFT run; its base
     model is read from adapter_config.json unless "local:<hf id>" is given."""
     from retrieval.fever_retrieval import FeverRetriever
+    selected = sample_claims(n, ids_file=claim_ids)
+    n = len(selected)
+    selection_metadata = manifest_metadata(claim_ids)
     os.makedirs(OUT_DIR, exist_ok=True)
     tag = model_name.replace("/", "_").replace(":", "_")
     if adapter:
@@ -358,13 +372,17 @@ def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
     suffix = "" if retrieval == "bm25" else f"_{retrieval}"
     if prompt_style != "direct":
         suffix += f"_{prompt_style}"
+    if claim_ids:
+        suffix += f"_{manifest_tag(claim_ids)}"
     path = output or os.path.join(OUT_DIR, f"{tag}_n{n}{suffix}.jsonl")
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
-    claims = [c for c in sample_claims(n) if c["id"] not in done]
+            done_ids = [json.loads(line)["id"] for line in f]
+            validate_resume_ids(done_ids, [c["id"] for c in selected])
+            done = set(done_ids)
+    claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if not claims:
         return path
@@ -400,6 +418,7 @@ def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
             for c, x, g in zip(batch, ctxs, gens):
                 f.write(json.dumps({"model": model.name, "retrieval": retrieval,
                                     "prompt_style": prompt_style,
+                                    **selection_metadata,
                                     **score(c, x, g, require_confidence=prompt_style not in ("cot_sft", "cot_native"))},
                                    ensure_ascii=False) + "\n")
         print(f"  {i + len(batch)}/{len(claims)}  {time.time() - t0:.0f}s", flush=True)

@@ -12,6 +12,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from core import reward as R
 from retrieval.build_bm25_index import DATA
 from .experiment_layout import artifacts_dir
+from .fever_eval import assert_not_reserved
 from verifier.model import LOCAL_MODEL, MAX_CITED, SEED, SYSTEM, parse
 
 SFT_DIR = os.path.join(DATA, "..", "train", "sft")
@@ -27,6 +28,7 @@ def load_rows(sft_dir, n, seed):
     """Prompts and gold labels/evidence ids from a prepared dataset."""
     with open(os.path.join(sft_dir, "labeled_prompts.jsonl"), encoding="utf-8") as f:
         rows = [json.loads(line) for line in f]
+    assert_not_reserved(rows, "GRPO training")
     random.Random(seed).shuffle(rows)
     out = []
     for r in rows[:n]:

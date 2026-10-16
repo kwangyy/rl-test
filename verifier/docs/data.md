@@ -57,7 +57,7 @@ verifier/data/
   averitec/       train.json, dev.json                                                         (not in git)
   train/sft/      model-independent SFT labeled_prompts.jsonl sets                         (in git)
   train/grpo/     GRPO labeled_prompts.jsonl sets and disagreement samples                 (in git)
-  eval/           frozen FEVER dev claim IDs                                                (in git)
+  eval/           historical dev IDs; evaluation-v1 audit, calibration and holdout manifests (in git)
   traces/         archived agent search/verify action histories                             (in git)
 verifier/experiments/<configuration>/runs/<run>/artifacts/
   meta.json, logs/train_log.json, checkpoints/adapter_config.json, optional rollouts.jsonl (in git)
@@ -90,3 +90,44 @@ ignored; new SoC job logs belong under their experiment run's
 ## 5. Fixed SFT/GRPO claim split
 
 `python -m utils.build_disjoint_sft_grpo_split --check` verifies the frozen 5,895-row oracle set and its claim-disjoint 4,695/1,200 split. The 1,200-row side reuses `sft/fever-oracle-matched-grpo-1200/labeled_prompts.jsonl`; the 4,695-row complement is `sft/fever-oracle-disjoint-4695/labeled_prompts.jsonl`. `split_manifest.json` records SHA-256 hashes, row and label counts, and zero overlap with the frozen 900 dev IDs. To regenerate the 4,695-row side from those committed inputs, run `python -m utils.build_disjoint_sft_grpo_split` from the repo root.
+
+## 6. Frozen development, calibration and holdout sets
+
+Frozen ID lists live in `verifier/data/eval/fever-evaluation-v1/`:
+
+| File | Role | Claims |
+|---|---|---:|
+| `../fever-dev-900-ids.json` | Unchanged development benchmark for prompt, model, retrieval and policy decisions | 900 |
+| `development-used-ids.json` | All previously used dev claims, including those 900 | 945 |
+| `calibration-900-ids.json` | Fit confidence adjustments after selecting the model/policy | 900 (300 per label) |
+| `holdout-3000-ids.json` | Compare finalized verifier and agent configurations | 3,000 (1,000 per label) |
+
+The [usage audit](../data/eval/fever-evaluation-v1/usage-audit.json) found 7,138 used train IDs and 945 used dev IDs across local artifacts and reachable Git history, including deleted files. Calibration and holdout were sampled from official FEVER dev, excluding recorded IDs, normalized text matches to used claims or the full official training pool, and duplicate candidates. The [manifest](../data/eval/fever-evaluation-v1/manifest.json) records the selection method, seed and file hashes. Unused status covers available project records only.
+
+Never use calibration or holdout for model/controller training, teacher targets or prompt/policy tuning. If holdout results guide further changes, treat that set as development and freeze a new version for independent validation. Report the balanced label sampling, since it affects precision and calibration. Agent comparisons keep the verifier, corpus/tools and budget matched.
+
+Run checks from the repo root after downloading the raw FEVER train/dev files:
+
+```bash
+# Routine check: unchanged files, reproducible splits and no reserved IDs in training
+python -m utils.build_fever_eval_splits --check
+
+# Before the first calibration/holdout run: also require no recorded usage
+python -m utils.build_fever_eval_splits --check-unused
+
+# Check a proposed training/controller dataset; each row needs id or claim_id
+python -m utils.build_fever_eval_splits --check-training path/to/training.jsonl
+```
+
+`--check-unused` includes `--check` and rescans current artifacts and reachable history. It is expected to fail after either reserved set appears in recorded runs, including intended final evaluations; continue using `--check` afterward. The builder refuses to overwrite frozen sets. Runtime leakage guards compare claim IDs.
+
+Select a full set with `--claim-ids <ID-file>` in verifier, agent and retrieval evaluators; this overrides `--n` (retrieval page recall excludes NEI). For example, once the configuration is finalized:
+
+```bash
+python -m verifier.evaluation.eval_verifier --model local --retrieval titles \
+  --prompt-style direct --max-new-tokens 1024 \
+  --claim-ids verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json \
+  --output verifier/evaluation/results/baseline-direct-cap1024/holdout-v1-run1/predictions.jsonl
+```
+
+For Slurm, export `CLAIM_IDS=<ID-file>` to `verifier/evaluation/run.sbatch`; it overrides `N_CLAIMS`.

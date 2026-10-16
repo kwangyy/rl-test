@@ -68,6 +68,8 @@ def build_examples(n, seed, chunk=200):
 
 def train(model_name, rows, out, qlora, max_steps, lr, rank, seed, system_prompt=SYSTEM,
           init_adapter=None):
+    from utils.fever_eval import assert_not_reserved
+    assert_not_reserved(rows, "SFT training")
     import torch
     from datasets import Dataset
     from peft import LoraConfig, PeftModel

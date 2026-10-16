@@ -18,8 +18,24 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from retrieval.build_bm25_index import DATA
 from retrieval.fever_retrieval import FeverRetriever
+from utils.fever_eval import assert_not_reserved, load_manifest_claims
 
 KS = (1, 3, 5, 10)
+
+
+def select_claims(split="train", n=None, ids_file=None):
+    fname = {"train": "train.jsonl", "dev": "shared_task_dev.jsonl"}[split]
+    source = os.path.join(DATA, fname)
+    if ids_file:
+        if split != "dev":
+            raise ValueError("--claim-ids requires the dev split")
+        return [row for row in load_manifest_claims(source, ids_file)
+                if row["label"] != "NOT ENOUGH INFO"]
+    with open(source, encoding="utf-8") as stream:
+        pool = [row for row in map(json.loads, stream) if row["label"] != "NOT ENOUGH INFO"]
+    claims = random.Random(1).sample(pool, n if n is not None else 1000)
+    assert_not_reserved(claims, "implicit retrieval development")
+    return claims
 
 
 def recall(claims, results):
@@ -35,13 +51,13 @@ def recall(claims, results):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--split", default="train")
-    ap.add_argument("--n", type=int, default=1000)
+    ap.add_argument("--split", choices=["train", "dev"], help="default train, or dev with --claim-ids")
+    ap.add_argument("--n", type=int, help="default 1000 non-NEI; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="explicit frozen dev set; NEI claims are omitted from page recall")
     a = ap.parse_args()
-    fname = {"train": "train.jsonl", "dev": "shared_task_dev.jsonl"}[a.split]
-    with open(os.path.join(DATA, fname), encoding="utf-8") as f:
-        claims = [c for c in map(json.loads, f) if c["label"] != "NOT ENOUGH INFO"]
-    claims = random.Random(1).sample(claims, a.n)
+    a.split = a.split or ("dev" if a.claim_ids else "train")
+    claims = select_claims(a.split, a.n, a.claim_ids)
+    a.n = len(claims)
     texts = [c["claim"] for c in claims]
 
     r = FeverRetriever()
