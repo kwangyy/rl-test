@@ -79,6 +79,8 @@ To evaluate a full set, pass `--claim-ids <ID-file>` (or `CLAIM_IDS=<ID-file>` f
   - `fever_score`: Strict FEVER metric (requires both correct verdict and full gold evidence citation).
   - `format_rate`: JSON parse and field adherence rate.
   - `evidence_f1`: Evidence sentence retrieval F1 on non-NEI claims.
+  - `harm_weighted_error`: Mean verdict harm using `core/reward.py` weights; lower is better.
+  - `nei_precision`: Fraction of predicted NEI verdicts that are correct; `null` if none are predicted.
   - `calibration`: Brier score and Expected Calibration Error (ECE) for verdict-token probability and stated text confidence.
 - **Offline Scoring Script**:
   ```bash

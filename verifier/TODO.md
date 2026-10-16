@@ -19,7 +19,7 @@ CoT SFT data preparation can proceed in parallel with step 1; it is a separate e
 - [x] Freeze evaluation v1 and publish its usage audit and leakage check under `data/eval/fever-evaluation-v1/`. Preserve the historical 900 development IDs; the audit finds 945 used dev IDs and 7,138 used train IDs across current artifacts and reachable Git history. Reserve 900 calibration and 3,000 holdout claims, balanced by label and initially screened for recorded IDs plus duplicate text against used claims and the full official training pool. Runtime leakage guards use claim IDs. See [data policy](docs/data.md#6-frozen-development-calibration-and-holdout-sets).
 - [ ] Run direct JSON (`THINKING=off`) and zero-shot evidence-chain (`THINKING=on`) evaluation on the same FEVER dev IDs and title retrieval: 30-claim smoke tests, then 900 claims. Submit `verifier/evaluation/run.sbatch`; each run stores predictions, metrics, manifest and logs under `verifier/evaluation/results/<condition>/<run>/`.
 - [ ] Record per claim: gold, verdict, evidence IDs, retrieval condition, reasoning if present, stated confidence, verdict-token probability, tokens and latency. Check evidence citations by hand; a valid E-ID alone does not prove support.
-- [ ] Report accuracy, FEVER score, evidence F1, label recall, Brier, ECE, risk–coverage and evidence-in-context strata with one evaluator. `verifier/evaluation/score_predictions.py` already replays the archived outputs.
+- [ ] Report accuracy, FEVER score, evidence F1, label recall, Brier, ECE, harm-weighted error, NEI precision, risk–coverage and evidence-in-context strata with one evaluator. `verifier/evaluation/score_predictions.py` already replays the archived outputs.
 
 ## P1 — prompt and inference controls (RL-1)
 

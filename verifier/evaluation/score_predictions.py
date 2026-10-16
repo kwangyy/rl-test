@@ -11,12 +11,20 @@ import json
 import math
 from pathlib import Path
 
+from core import reward as R
+
 LABELS = ("SUPPORTED", "REFUTED", "NOT_ENOUGH_INFO")
 CONFIDENCES = ("stated_conf", "token_conf")
 
 
 def mean(values):
     return sum(values) / len(values) if values else None
+
+
+def verdict_harm(gold, pred):
+    gold = R.NEI if gold == "NOT_ENOUGH_INFO" else gold
+    pred = R.NEI if pred == "NOT_ENOUGH_INFO" else pred
+    return 1.0 - R.correctness(gold, pred)
 
 
 def read_rows(path):
@@ -94,6 +102,9 @@ def summarize(rows):
                                          if r.get("evidence_f1") is not None]),
             "recall": {label: mean([int(r["pred"] == label) for r in part if r["gold"] == label])
                        for label in LABELS},
+            "harm_weighted_error": mean([verdict_harm(r["gold"], r["pred"]) for r in part]),
+            "nei_precision": mean([int(r["gold"] == "NOT_ENOUGH_INFO") for r in part
+                                   if r["pred"] == "NOT_ENOUGH_INFO"]),
             "calibration": {key: calibration(part, key) for key in CONFIDENCES} if part else None,
         }
 

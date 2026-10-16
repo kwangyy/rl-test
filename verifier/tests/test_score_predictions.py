@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from verifier.evaluation.score_predictions import calibration, read_rows, summarize
+from verifier.evaluation.score_predictions import calibration, read_rows, summarize, verdict_harm
 
 
 def row(claim_id, correct, confidence, gold="SUPPORTED", in_context=True):
@@ -17,6 +17,19 @@ def row(claim_id, correct, confidence, gold="SUPPORTED", in_context=True):
 
 
 class SavedRunMetricsTest(unittest.TestCase):
+    def test_verdict_harm_cost_matrix_and_unparseable_verdicts(self):
+        # Columns: predicted SUPPORTED, REFUTED, NOT_ENOUGH_INFO, invalid.
+        costs = {
+            "SUPPORTED": (0.0, 1.0, 1.0, 1.0),
+            "REFUTED": (1.5, 0.0, 1.0, 1.0),
+            "NOT_ENOUGH_INFO": (1.75, 1.0, 0.0, 1.0),
+        }
+        predictions = ("SUPPORTED", "REFUTED", "NOT_ENOUGH_INFO", None)
+        for gold, expected in costs.items():
+            for pred, cost in zip(predictions, expected):
+                with self.subTest(gold=gold, pred=pred):
+                    self.assertEqual(verdict_harm(gold, pred), cost)
+
     def test_brier_ece_and_tied_risk_coverage(self):
         rows = [row(1, True, 1.0), row(2, False, 1.0),
                 row(3, True, 0.5), row(4, False, 0.5)]
@@ -27,20 +40,40 @@ class SavedRunMetricsTest(unittest.TestCase):
             "coverage": 0.5, "risk": 0.5, "threshold": 1.0})
         self.assertEqual(result["risk_at_coverage"]["0.8"]["coverage"], 1.0)
 
+    def test_nei_precision_uses_predicted_nei_as_denominator(self):
+        cases = [("NOT_ENOUGH_INFO", "NOT_ENOUGH_INFO"),
+                 ("SUPPORTED", "NOT_ENOUGH_INFO"), ("REFUTED", "NOT_ENOUGH_INFO"),
+                 ("NOT_ENOUGH_INFO", "REFUTED"), ("SUPPORTED", None)]
+        rows = [{**row(i, gold == pred, None, gold=gold), "pred": pred}
+                for i, (gold, pred) in enumerate(cases)]
+        result = summarize(rows)
+        self.assertEqual(result["all"]["nei_precision"], 1 / 3)
+        self.assertEqual(result["all"]["recall"]["NOT_ENOUGH_INFO"], 0.5)
+        self.assertEqual(result["strata"]["gold_in_context"]["nei_precision"], 0.0)
+        self.assertEqual(result["strata"]["gold_nei"]["nei_precision"], 1.0)
+
     def test_missing_confidence_and_context_strata(self):
         rows = [row(1, True, 0.9), row(2, False, None, in_context=False),
                 row(3, True, 0.7, gold="NOT_ENOUGH_INFO", in_context=None)]
+        rows[1].update(gold="REFUTED", pred="SUPPORTED")
         result = summarize(rows)
         self.assertAlmostEqual(result["all"]["calibration"]["stated_conf"]["coverage"], 2 / 3)
         self.assertEqual(result["strata"]["gold_in_context"]["n"], 1)
         self.assertEqual(result["strata"]["gold_not_in_context"]["n"], 1)
         self.assertEqual(result["strata"]["gold_nei"]["n"], 1)
+        self.assertEqual(result["all"]["harm_weighted_error"], 0.5)
+        self.assertEqual(result["strata"]["gold_not_in_context"]["harm_weighted_error"], 1.5)
 
     def test_format_rate_counts_invalid_json(self):
         rows = [row(1, True, 0.9), row(2, False, None)]
         rows[0]["format_ok"] = True
-        rows[1]["format_ok"] = False
-        self.assertEqual(summarize(rows)["all"]["format_rate"], 0.5)
+        rows[1].update(pred=None, format_ok=False)
+        result = summarize(rows)
+        self.assertEqual(result["all"]["format_rate"], 0.5)
+        self.assertEqual(result["all"]["harm_weighted_error"], 0.5)
+        self.assertIsNone(result["strata"]["gold_nei"]["harm_weighted_error"])
+        self.assertIsNone(result["all"]["nei_precision"])
+        self.assertIsNone(result["strata"]["gold_nei"]["nei_precision"])
 
     def test_cot_sft_reports_reasoning_without_stated_confidence(self):
         item = row(1, True, None)
