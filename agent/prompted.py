@@ -134,7 +134,7 @@ def decide(ep, big):
     return obj, ctl
 
 
-def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8):
+def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, search_k=K):
     eps = [Episode(c) for c in claims]
     texts = {}  # "page:line" -> sentence, shared so observations can quote cited evidence
     for ep in eps:
@@ -155,12 +155,12 @@ def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8):
         searches = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "search"]
         if searches:
             t0 = time.time()
-            hits = search.batch([a["query"] for _, a, _ in searches], K)
+            hits = search.batch([a["query"] for _, a, _ in searches], search_k)
             s = (time.time() - t0) / len(searches)
             for (ep, a, c), hs in zip(searches, hits):
                 ep.last_hits = hs
                 texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
-                ep.log("search", {"query": a["query"], "k": K}, {"hits": hs}, s, c)
+                ep.log("search", {"query": a["query"], "k": search_k}, {"hits": hs}, s, c)
 
         decomps = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "decompose"]
         if decomps:
@@ -294,10 +294,17 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=900)
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
+    ap.add_argument("--search-k", type=int, default=K)
+    ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     a = ap.parse_args()
+    if a.search_k < 1 or a.candidate_pages < 1:
+        ap.error("search-k and candidate-pages must be positive")
 
     run = "prompted-" + (adapter_label(a.adapter) if a.adapter else "base")
     run += f"_{a.tag}" if a.tag else ""
+    search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
+    run += f"_{search_tag}"
     os.makedirs(TRACE_DIR, exist_ok=True)
     path = os.path.join(TRACE_DIR, f"fever_dev_{run}_n{a.n}.jsonl")
 
@@ -310,13 +317,14 @@ if __name__ == "__main__":
     if claims:
         big = BigModel(a.controller)
         decomposer = Decomposer(big, cache_path(big.name, a.n))
-        search = FeverSearch()
+        search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
                     "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS}
+        run_info["policy"] = f"prompted-{search_tag}"
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):
-            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info)
+            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info, search_k=a.search_k)
             with open(path, "a", encoding="utf-8") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")

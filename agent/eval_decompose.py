@@ -174,6 +174,7 @@ def compare(runs, ids):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
     ap.add_argument("--model", default=LOCAL_MODEL)
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--decomposer", default=BIG_MODEL)
@@ -194,15 +195,16 @@ if __name__ == "__main__":
 
     policies = a.policies.split(",")
     suffix = (adapter_label(a.adapter) if a.adapter else "base") + (f"_{a.tag}" if a.tag else "")
+    suffix += f"_{a.method}-p{K_PAGES}-k{K}"
     paths = {p: os.path.join(TRACE_DIR, f"fever_dev_decompose-{p}-{suffix}_n{a.n}.jsonl") for p in policies}
     want = {c["id"] for c in claims}
     todo_p = [p for p in policies if not want <= set(load(paths[p]))]
     print(f"{len(claims)} split claims; to run: {', '.join(todo_p) or 'nothing'}")
     if todo_p:
-        search = FeverSearch()
+        search = FeverSearch(method=a.method)
         verify = LocalVerify(search, a.model, a.adapter)
         base = {"controller": None, "decomposer": decomp.name, "verifier": verify.name,
-                "reward_version": reward_version(), "seed": SEED}
+                "reward_version": reward_version(), "seed": SEED, "search_method": a.method}
         for p in todo_p:
             done = set(load(paths[p]))
             todo = [c for c in claims if c["id"] not in done]
