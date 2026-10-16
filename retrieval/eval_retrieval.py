@@ -66,7 +66,7 @@ if __name__ == "__main__":
     print(f"title index: {len(r.exact):,} titles, {time.time() - t:.0f}s")
 
     kmax = max(KS)
-    runs = {"bm25": lambda: r.search(texts, k=kmax)}
+    runs = {"bm25": lambda: r.search_pages(texts, k=kmax)}
     for mt in (2, 3, 5):
         for lo in (True, False):
             runs[f"titles(max {mt}{', longest' if lo else ', all'})"] = \

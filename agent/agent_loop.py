@@ -48,9 +48,9 @@ REWARD_LABEL = {"SUPPORTED": R.SUPPORTED, "REFUTED": R.REFUTED, NEI: R.NEI}
 
 
 class FeverSearch:
-    """interfaces.Search over the page-level FEVER index: the sentences of the
-    top K_PAGES title-match + BM25 pages, page by page, at most k of them.
-    Score is page-level (K_PAGES - page rank), so every sentence of a page ties.
+    """Search tool: title-match + page BM25 candidates, then ranked sentences.
+
+    Returns up to k Hit dictionaries using sentence BM25 or hybrid ranking.
 
     Usage:
         search = FeverSearch(method="bm25")  # or "hybrid"
