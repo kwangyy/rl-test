@@ -6,6 +6,11 @@ only the loop differs. The claim comes in with no evidence, the model calls the
 the numbered sentences it gets back, and ends with the untrained baseline JSON. Reward is
 reward.total on the final answer, with n_ops = number of searches.
 
+The search budget (--max-calls) is enforced by the environment: past it, search
+answers "reply now" instead of searching, and TRL gets --budget-grace extra
+iterations, so a rollout is not cut off on an unanswered call (see
+docs/agent-loop-notes.md section 5). --budget-grace 0 is the historical behaviour.
+
 Tool results are masked out of the loss by TRL (tool_mask, multiplied into the
 loss mask in GRPOTrainer), so the model is trained only on what it wrote: its
 queries and its verdict. Tool tokens still count toward max_completion_length.
@@ -77,13 +82,23 @@ class FeverSearchEnv:
     k_pages = 3
     search_k = 30
     sents_per_page = 10
+    # Search budget, enforced here rather than by TRL: TRL ends a rollout that asks
+    # for one more call than max_tool_calling_iterations, before it can answer.
+    # With budget_grace > 0 a call past the budget returns ANSWER_NOW instead, and
+    # TRL is given budget_grace extra iterations so the model still gets to reply.
+    max_calls = 2
+    budget_grace = 2
+
+    LAST_SEARCH = "\n(That was your last search. Reply now with only the JSON object.)"
+    ANSWER_NOW = "No searches left. Reply now with only the JSON object."
 
     def __init__(self):
         self.reset()
 
     def reset(self, **row):
         self.shown = {}  # "E3" -> "page:line"
-        self.n_search = 0
+        self.n_search = 0  # searches actually run; the reward's n_ops
+        self.n_refused = 0  # calls past the budget, answered with ANSWER_NOW
         return None
 
     def search(self, query: str) -> str:
@@ -95,6 +110,9 @@ class FeverSearchEnv:
         Returns:
             Numbered evidence sentences, one per line, as "E<n> [Page title] sentence".
         """
+        if self.budget_grace and self.n_search >= self.max_calls:
+            self.n_refused += 1
+            return self.ANSWER_NOW
         self.n_search += 1
         r = retriever()
         seen = set(self.shown.values())
@@ -114,7 +132,10 @@ class FeverSearchEnv:
             eid = f"E{len(self.shown) + 1}"
             self.shown[eid] = key
             lines.append(f"{eid} [{page.replace('_', ' ')}] {text}")
-        return "\n".join(lines) or "No new results."
+        out = "\n".join(lines) or "No new results."
+        if self.budget_grace and self.n_search >= self.max_calls:
+            out += self.LAST_SEARCH
+        return out
 
 
 def load_rows(n, max_calls):
@@ -159,6 +180,7 @@ def make_reward_funcs(cfg, seed, log_path):
             with open(log_path, "a", encoding="utf-8") as f:
                 for m, e, g, c, (r, p) in zip(completions, environments, gold, claim, res):
                     f.write(json.dumps({"claim": c, "gold": g, "reward": r, "parts": p, "n_search": e.n_search,
+                                        "n_refused": e.n_refused, "ended_on_tool_call": ended_on_tool_call(m),
                                         "shown": e.shown, "messages": m}, ensure_ascii=False, default=str) + "\n")
         return cache[key]
 
@@ -177,8 +199,17 @@ def make_reward_funcs(cfg, seed, log_path):
     def searches(completions, environments, **_):
         return [float(e.n_search) for e in environments]
 
-    funcs = [verifier_reward, part("correctness"), part("calibration"), part("evidence"), format_ok, searches]
-    return funcs, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    def cut_off(completions, **_):
+        """1 when the rollout ended on an unanswered tool call (TRL's loop limit or overlong result)."""
+        return [float(ended_on_tool_call(m)) for m in completions]
+
+    funcs = [verifier_reward, part("correctness"), part("calibration"), part("evidence"), format_ok, searches,
+             cut_off]
+    return funcs, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def ended_on_tool_call(messages):
+    return bool(messages and messages[-1].get("tool_calls"))
 
 
 def train(a, out):
@@ -209,7 +240,7 @@ def train(a, out):
         per_device_train_batch_size=a.num_generations,  # one prompt's group per micro-batch
         gradient_accumulation_steps=a.prompts_per_step,
         max_completion_length=a.max_completion_length,  # includes the (masked) tool results
-        max_tool_calling_iterations=a.max_calls,
+        max_tool_calling_iterations=a.max_calls + a.budget_grace,  # the env enforces max_calls itself
         temperature=1.0, beta=a.beta,
         chat_template_kwargs={"enable_thinking": False},
         reward_weights=weights,
@@ -246,6 +277,9 @@ if __name__ == "__main__":
     ap.add_argument("--prompts-per-step", type=int, default=2)
     ap.add_argument("--max-calls", type=int, default=2,
                     help="search budget per claim; each result is ~860 tokens, so 3 calls need --max-completion-length 3072")
+    ap.add_argument("--budget-grace", type=int, default=2,
+                    help="extra tool iterations that answer past-budget calls with 'reply now'; "
+                         "0 restores the historical behaviour, where such rollouts end unanswered")
     ap.add_argument("--max-completion-length", type=int, default=2048)
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--beta", type=float, default=0.04)
@@ -265,8 +299,11 @@ if __name__ == "__main__":
         ap.error("search-k/candidate-pages overrides require --method bm25 or hybrid")
     if a.method and (not a.config_name or not a.run_name):
         ap.error("ranked search requires explicit --config-name and --run-name")
+    if a.budget_grace < 0:
+        ap.error("budget-grace must be nonnegative")
     FeverSearchEnv.method = a.method
     FeverSearchEnv.k_pages, FeverSearchEnv.search_k = a.candidate_pages, a.search_k
+    FeverSearchEnv.max_calls, FeverSearchEnv.budget_grace = a.max_calls, a.budget_grace
 
     name = f"{a.model.replace('/', '_')}_mt_{a.init}_{a.reward}_n{a.n_train}" + (f"_{a.tag}" if a.tag else "")
     artifacts = artifacts_dir("grpo_mt", name, a.seed, a.run_name, a.output_root, a.config_name)

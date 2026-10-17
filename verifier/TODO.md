@@ -44,5 +44,6 @@ CoT SFT data preparation can proceed in parallel with step 1; it is a separate e
 
 - [ ] After the SFT-started GRPO pilot, compare it against the same SFT checkpoint with matched prompts, IDs and evaluator. For CoT GRPO, measure reasoning/citation quality, reward spread, accuracy, evidence, calibration, variance and compute cost; expand only if the pilot is informative.
 - [ ] Connect the verifier to the agent loop's `verify()` interface. Compare one search, fixed NEI retry and confidence-guided retry before training a controller.
+- [ ] Agent loop (AG-2): work through the next steps in [agent-loop-notes.md](docs/agent-loop-notes.md#7-next-steps) — new fixed baselines on ranked search, prompted controller v2/v3, decomposition fixes, and the multi-turn GRPO cutoff fix.
 - [ ] Train or evaluate a real-data controller only if simple fixed policies leave a measurable accuracy–cost gap. Check retrieval misses and transfer to SciFact / AVeriTeC.
 - [ ] Prepare the team failure audit, shortcut checks, transfer results and final demo from the same evaluation definitions.

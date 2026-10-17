@@ -88,6 +88,8 @@ Added for `agent/prompted.py`, where a big model picks the actions. Schema 1
 rows (the fixed policy) stay valid; every field below is an addition.
 
 - `run.controller`, `run.max_steps`: the controller model and the action budget.
+- `run.controller_prompt` (added 2026-10-17): the controller prompt version, e.g. `"v2"`.
+  Absent on earlier rows, which used v1. See [agent loop notes](agent-loop-notes.md#3-prompted-controller-v1-and-v2-prompts).
 - `steps[].controller`: the controller call that chose this step:
   `text` (raw reply), `valid` (false when the reply was unusable and the loop
   fell back to search, then verify, then commit), `tokens_in`, `tokens_out`,
@@ -105,7 +107,9 @@ rows (the fixed policy) stay valid; every field below is an addition.
   `steps[].controller`.
 - A `verify` step's verdict can be judged on a sub-claim. The episode's
   `final` then combines them: any REFUTED refutes, all SUPPORTED supports,
-  otherwise NOT_ENOUGH_INFO.
+  otherwise NOT_ENOUGH_INFO. In the prompted controller this happens only when
+  the full claim was never verified; any full-claim verdict takes precedence
+  (a known flaw, see [agent loop notes](agent-loop-notes.md#flaws-that-would-hide-a-gain-on-big-claims)).
 
 ## Schema 3 (2026-10-16): explicit frozen evaluation selection
 

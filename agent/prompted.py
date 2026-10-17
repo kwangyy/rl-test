@@ -54,10 +54,15 @@ Actions (reply with exactly one JSON object, nothing else):
                                             on the full claim
   {"action": "abstain"}                     answer NOT_ENOUGH_INFO
 
-Every action costs. Search, then verify. Commit when the verifier is confident and
-its cited evidence is on topic. Search again with a better query when the pages
-found are about the wrong entity or the verifier cites nothing. Abstain when
+Every action costs. Search, then verify. Commit when the verifier's confidence is
+0.70 or higher and its cited evidence is on topic. Search again with a better query
+when the pages found are about the wrong entity, the verifier cites nothing, or its
+confidence is below 0.70; after one such retry, commit the latest verdict.
+A NOT_ENOUGH_INFO verdict is not a failure to search past: if the verifier said
+NOT_ENOUGH_INFO earlier, a later SUPPORTED or REFUTED only counts when its
+confidence is higher than that earlier one's; otherwise abstain. Abstain when
 repeated searches cannot find relevant pages."""
+CONTROLLER_PROMPT = "v2"  # v1: no confidence threshold; v2: retry below 0.70, NEI not overridden by weaker verdicts
 
 class Episode:
     """One claim's state while the controller acts on it."""
@@ -329,7 +334,7 @@ if __name__ == "__main__":
         search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
-                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS,
+                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS, "controller_prompt": CONTROLLER_PROMPT,
                     **manifest_metadata(a.claim_ids)}
         run_info["policy"] = f"prompted-{search_tag}"
         t0 = time.time()
