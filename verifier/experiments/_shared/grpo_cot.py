@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from utils.experiment_layout import artifacts_dir
+from utils.fever_eval import assert_not_reserved
 from core import reward as R
 from verifier.model import LABELS, LOCAL_MODEL, MAX_CITED, NATIVE_THINKING_SYSTEM, SEED, parse
 
@@ -70,6 +71,7 @@ def thinking_present(completions, **_):
 def load_train_rows(data_dir, n_train):
     path = Path(data_dir) / "labeled_prompts.jsonl"
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert_not_reserved(rows, "native-thinking GRPO training")
     ids = [str(row["id"]) for row in rows]
     dev_ids = set(map(str, json.loads((ROOT / "verifier/data/eval/fever-dev-900-ids.json").read_text())["ids"]))
     if len(rows) != 1200 or len(set(ids)) != 1200 or set(ids) & dev_ids:

@@ -15,6 +15,11 @@ queries and its verdict. Tool tokens still count toward max_completion_length.
     python grpo_multiturn.py --init sft                   # start from the SFT verifier
     python grpo_multiturn.py --max-calls 3 --max-completion-length 3072   # more searches, more memory
 
+Pass --method bm25 or hybrid for complete ranked sentence search, with
+--candidate-pages and --search-k. Ranked runs require a new --config-name and
+--run-name. Omitting --method preserves the historical three-page, first-ten-
+sentences policy used by the existing experiment wrapper.
+
 What the spike has to answer (write the numbers into docs/grpo-results.md):
 does it run, do the rollouts call search and end with valid JSON
 (rollouts.jsonl), peak GPU GB and seconds per step (meta.json).
@@ -56,7 +61,8 @@ def retriever():
     global _RETRIEVER
     if _RETRIEVER is None:
         from retrieval.fever_retrieval import FeverRetriever
-        _RETRIEVER = FeverRetriever()
+        _RETRIEVER = FeverRetriever(method=FeverSearchEnv.method or "bm25",
+                                    candidate_pages=FeverSearchEnv.k_pages)
     return _RETRIEVER
 
 
@@ -67,7 +73,9 @@ class FeverSearchEnv:
     schema from the signature and docstring.
     """
 
+    method = None  # Omitted --method preserves historical page-prefix search.
     k_pages = 3
+    search_k = 30
     sents_per_page = 10
 
     def __init__(self):
@@ -79,7 +87,7 @@ class FeverSearchEnv:
         return None
 
     def search(self, query: str) -> str:
-        """Search Wikipedia and return numbered sentences from the best-matching pages.
+        """Search Wikipedia and return evidence under the configured retrieval policy.
 
         Args:
             query: What to look for, for example the names and facts in the claim.
@@ -91,14 +99,21 @@ class FeverSearchEnv:
         r = retriever()
         seen = set(self.shown.values())
         lines = []
-        for page in r.search_with_titles([query], k=self.k_pages)[0]:
-            for line, text in r.sentences(page)[:self.sents_per_page]:
-                key = f"{page}:{line}"
-                if key in seen:
-                    continue
-                eid = f"E{len(self.shown) + 1}"
-                self.shown[eid] = key
-                lines.append(f"{eid} [{page.replace('_', ' ')}] {text}")
+        if self.method is None:
+            sentences = ((page, line, text)
+                         for page in r.search_with_titles([query], k=self.k_pages)[0]
+                         for line, text in r.sentences(page)[:self.sents_per_page])
+        else:
+            sentences = ((h["page"], h["line"], h["text"])
+                         for h in r.search([query], k=self.search_k)[0])
+        for page, line, text in sentences:
+            key = f"{page}:{line}"
+            if key in seen:
+                continue
+            seen.add(key)
+            eid = f"E{len(self.shown) + 1}"
+            self.shown[eid] = key
+            lines.append(f"{eid} [{page.replace('_', ' ')}] {text}")
         return "\n".join(lines) or "No new results."
 
 
@@ -239,7 +254,19 @@ if __name__ == "__main__":
     ap.add_argument("--run-name", default=None, help="repeat label under verifier/experiments/<configuration>/runs/")
     ap.add_argument("--output-root", default=None, help="experiments directory for run artifacts (default: verifier/experiments)")
     ap.add_argument("--config-name", default=None, help="directory name for this training configuration")
+    ap.add_argument("--method", choices=("bm25", "hybrid"),
+                    help="enable ranked sentence search; omit for the historical page-prefix policy")
+    ap.add_argument("--search-k", type=int, default=30, help="returned sentence budget for ranked search")
+    ap.add_argument("--candidate-pages", type=int, default=3, help="candidate-page budget for ranked search")
     a = ap.parse_args()
+    if a.search_k < 1 or a.candidate_pages < 1:
+        ap.error("search-k and candidate-pages must be positive")
+    if a.method is None and (a.search_k != 30 or a.candidate_pages != 3):
+        ap.error("search-k/candidate-pages overrides require --method bm25 or hybrid")
+    if a.method and (not a.config_name or not a.run_name):
+        ap.error("ranked search requires explicit --config-name and --run-name")
+    FeverSearchEnv.method = a.method
+    FeverSearchEnv.k_pages, FeverSearchEnv.search_k = a.candidate_pages, a.search_k
 
     name = f"{a.model.replace('/', '_')}_mt_{a.init}_{a.reward}_n{a.n_train}" + (f"_{a.tag}" if a.tag else "")
     artifacts = artifacts_dir("grpo_mt", name, a.seed, a.run_name, a.output_root, a.config_name)
@@ -250,7 +277,9 @@ if __name__ == "__main__":
     secs, peak_gb, steps = train(a, str(out))
     meta = {**vars(a), "steps": steps, "train_seconds": round(secs),
             "seconds_per_step": round(secs / max(steps, 1), 1), "peak_gpu_gb": round(peak_gb, 2),
-            "k_pages": FeverSearchEnv.k_pages, "sents_per_page": FeverSearchEnv.sents_per_page}
+            "k_pages": FeverSearchEnv.k_pages,
+            "search_policy": "ranked" if a.method else "page_prefix",
+            **({"sents_per_page": FeverSearchEnv.sents_per_page} if a.method is None else {})}
     with open(artifacts / "meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1)
     print(json.dumps(meta, indent=1))

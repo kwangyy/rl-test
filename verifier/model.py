@@ -1,6 +1,6 @@
 """Run a verifier on FEVER claims and save claim-level evaluation results.
 
-Retrieve top-k pages with BM25, show their sentences, ask the model for
+Build page-based or ranked-sentence evidence, then ask the model for
 {verdict, evidence ids, confidence} as JSON. Runs the local small model or
 any OpenRouter model on the same inputs, so the two are directly comparable.
 
@@ -19,6 +19,7 @@ A rerun skips claims already in the file. Archived historical runs are kept
 separately in verifier/evaluation/results/archive/.
 """
 
+from copy import copy
 import json
 import math
 import os
@@ -30,6 +31,8 @@ import time
 sys.stdout.reconfigure(encoding="utf-8")
 
 from core.reward import evidence_f1
+from utils.fever_eval import (LEGACY_IDS, assert_not_reserved, load_manifest_claims,
+                             manifest_metadata, manifest_tag, validate_resume_ids)
 
 DATA = os.path.join(os.path.dirname(__file__), "data", "fever")
 
@@ -98,6 +101,15 @@ OUT_DIR = os.path.join(DATA, "..", "..", "evaluation", "results", "manual")
 VERDICT_PREFIX = re.compile(r'"verdict"\s*:\s*"')
 
 
+def resolve_context_mode(name):
+    """Accept explicit context names and historical command/API aliases."""
+    aliases = {"bm25": "page_bm25", "titles": "page_titles", "hybrid": "sentence_hybrid"}
+    mode = aliases.get(name, name)
+    if mode not in ("page_bm25", "page_titles", "oracle", "sentence_bm25", "sentence_hybrid"):
+        raise ValueError(f"unknown context mode: {name}")
+    return mode
+
+
 def adapter_label(path):
     """Unique short label for legacy adapter dirs and experiment checkpoints."""
     last = os.path.normpath(path.split(",")[-1])
@@ -113,8 +125,16 @@ def adapter_label(path):
 SPLIT_FILE = {"dev": "shared_task_dev.jsonl", "train": "train.jsonl"}
 
 
-def sample_claims(n, seed=SEED, split="dev"):
-    """n claims from a FEVER split, balanced across the three labels."""
+def sample_claims(n, seed=SEED, split="dev", ids_file=None):
+    """Use every explicit manifest ID, or sample n claims balanced by label."""
+    source = os.path.join(DATA, SPLIT_FILE[split])
+    if ids_file is not None:
+        if split != "dev":
+            raise ValueError("explicit evaluation claim IDs require the dev split")
+        return load_manifest_claims(source, ids_file)
+    # Preserve the historical benchmark by ID, independent of raw-file ordering.
+    if split == "dev" and n == 900 and seed == SEED:
+        return load_manifest_claims(source, LEGACY_IDS)
     with open(os.path.join(DATA, SPLIT_FILE[split]), encoding="utf-8") as f:
         dev = [json.loads(line) for line in f]
     rng = random.Random(seed)
@@ -123,6 +143,7 @@ def sample_claims(n, seed=SEED, split="dev"):
         pool = [c for c in dev if c["label"] == label]
         out += rng.sample(pool, n // 3 + (1 if i < n % 3 else 0))
     rng.shuffle(out)
+    assert_not_reserved(out, f"implicit FEVER {split} sampling")
     return out
 
 
@@ -144,25 +165,43 @@ def oracle_pages(claim, retrieved):
     return pages
 
 
-def build_context(retriever, claims, retrieval="bm25"):
-    """Per claim: the shown sentences as [(eid, page, line, text)] plus
-    retrieval diagnostics. retrieval: "bm25", "titles" (title match + BM25)
-    or "oracle" (gold pages guaranteed, title-match pages as distractors)."""
-    search = retriever.search if retrieval == "bm25" else retriever.search_with_titles
-    pages = search([c["claim"] for c in claims], k=K_PAGES)
-    if retrieval == "oracle":
-        pages = [oracle_pages(c, ps) for c, ps in zip(claims, pages)]
+def build_context(retriever, claims, retrieval="bm25", *, search_k=K_PAGES * MAX_SENTS_PER_PAGE):
+    """Build page_bm25/page_titles/oracle or sentence_bm25/sentence_hybrid evidence.
+
+    The retrieval argument keeps its existing API name; old mode aliases work.
+    """
+    mode = resolve_context_mode(retrieval)
+    if mode in ("sentence_bm25", "sentence_hybrid"):
+        if search_k < 1:
+            raise ValueError("search_k must be positive")
+        method = "hybrid" if mode == "sentence_hybrid" else "bm25"
+        # Reuse configured backends so their lazy title index survives batches.
+        r = retriever if retriever.method == method else copy(retriever)
+        r.method = method
+        hits = r.search([c["claim"] for c in claims], k=search_k)
+        showns = [[(f"E{i + 1}", h["page"], h["line"], h["text"])
+                   for i, h in enumerate(row)] for row in hits]
+        pages = None  # Final hits do not expose the whole candidate-page pool.
+    else:
+        search = retriever.search_pages if mode == "page_bm25" else retriever.search_with_titles
+        pages = search([c["claim"] for c in claims], k=K_PAGES)
+        if mode == "oracle":
+            pages = [oracle_pages(c, ps) for c, ps in zip(claims, pages)]
+        showns = []
+        for ps in pages:
+            shown = []
+            for p in ps:
+                for line, text in retriever.sentences(p)[:MAX_SENTS_PER_PAGE]:
+                    shown.append((f"E{len(shown) + 1}", p, line, text))
+            showns.append(shown)
     out = []
-    for c, ps in zip(claims, pages):
-        shown = []
-        for p in ps:
-            for line, text in retriever.sentences(p)[:MAX_SENTS_PER_PAGE]:
-                shown.append((f"E{len(shown) + 1}", p, line, text))
+    for i, (c, shown) in enumerate(zip(claims, showns)):
         shown_keys = {(p, line) for _, p, line, _ in shown}
         gs = gold_sets(c)
         out.append({
             "shown": shown,
-            "gold_page_retrieved": any(all(p in ps for p, _ in s) for s in gs) if gs else None,
+            "gold_page_retrieved": (any(all(p in pages[i] for p, _ in s) for s in gs)
+                                    if gs and pages is not None else None),
             "gold_in_context": any(s <= shown_keys for s in gs) if gs else None,
         })
     return out
@@ -346,25 +385,45 @@ def score(claim, ctx, gen, require_confidence=True):
 
 
 def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
-        prompt_style="direct", max_new_tokens=None):
+        prompt_style="direct", max_new_tokens=None, claim_ids=None, *,
+        search_k=K_PAGES * MAX_SENTS_PER_PAGE, candidate_pages=K_PAGES):
     """model_name: "local" (LOCAL_MODEL), "local:<hf id>" for another local
     base, or an OpenRouter id. adapter: LoRA checkpoint dir from an SFT run; its base
     model is read from adapter_config.json unless "local:<hf id>" is given."""
     from retrieval.fever_retrieval import FeverRetriever
+    mode = resolve_context_mode(retrieval)
+    ranked = mode in ("sentence_bm25", "sentence_hybrid")
+    if search_k < 1 or candidate_pages < 1:
+        raise ValueError("search_k and candidate_pages must be positive")
+    if not ranked and (search_k != K_PAGES * MAX_SENTS_PER_PAGE or candidate_pages != K_PAGES):
+        raise ValueError("search_k/candidate_pages overrides require sentence_bm25 or sentence_hybrid")
+    selected = sample_claims(n, ids_file=claim_ids)
+    n = len(selected)
+    selection_metadata = manifest_metadata(claim_ids)
     os.makedirs(OUT_DIR, exist_ok=True)
     tag = model_name.replace("/", "_").replace(":", "_")
     if adapter:
         tag += "+" + adapter_label(adapter)
     suffix = "" if retrieval == "bm25" else f"_{retrieval}"
+    if ranked:
+        suffix += f"-p{candidate_pages}-k{search_k}"
     if prompt_style != "direct":
         suffix += f"_{prompt_style}"
+    if claim_ids:
+        suffix += f"_{manifest_tag(claim_ids)}"
     path = output or os.path.join(OUT_DIR, f"{tag}_n{n}{suffix}.jsonl")
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
-    claims = [c for c in sample_claims(n) if c["id"] not in done]
+            existing = [json.loads(line) for line in f]
+            validate_resume_ids([row["id"] for row in existing], [c["id"] for c in selected])
+            if ranked and any((resolve_context_mode(row.get("context_mode", row.get("retrieval"))),
+                               row.get("search_k"), row.get("candidate_pages")) !=
+                              (mode, search_k, candidate_pages) for row in existing):
+                raise ValueError("output has different retrieval settings; use a new output path")
+            done = {row["id"] for row in existing}
+    claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if not claims:
         return path
@@ -390,16 +449,19 @@ def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
             raise ValueError("cot_native currently requires a local Qwen model")
         model = OpenRouterModel(model_name, system_prompt=system_prompt,
                                 max_new_tokens=max_new_tokens)
-    retriever = FeverRetriever()
+    retriever = FeverRetriever(method="hybrid" if mode == "sentence_hybrid" else "bm25",
+                               candidate_pages=candidate_pages)
     t0 = time.time()
     for i in range(0, len(claims), chunk):
         batch = claims[i:i + chunk]
-        ctxs = build_context(retriever, batch, retrieval)
+        ctxs = build_context(retriever, batch, retrieval, search_k=search_k)
         gens = model.run([render(c["claim"], x["shown"]) for c, x in zip(batch, ctxs)])
         with open(path, "a", encoding="utf-8") as f:
             for c, x, g in zip(batch, ctxs, gens):
-                f.write(json.dumps({"model": model.name, "retrieval": retrieval,
+                f.write(json.dumps({"model": model.name, "retrieval": retrieval, "context_mode": mode,
                                     "prompt_style": prompt_style,
+                                    **({"search_k": search_k, "candidate_pages": candidate_pages} if ranked else {}),
+                                    **selection_metadata,
                                     **score(c, x, g, require_confidence=prompt_style not in ("cot_sft", "cot_native"))},
                                    ensure_ascii=False) + "\n")
         print(f"  {i + len(batch)}/{len(claims)}  {time.time() - t0:.0f}s", flush=True)

@@ -134,7 +134,7 @@ def decide(ep, big):
     return obj, ctl
 
 
-def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8):
+def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, search_k=K):
     eps = [Episode(c) for c in claims]
     texts = {}  # "page:line" -> sentence, shared so observations can quote cited evidence
     for ep in eps:
@@ -155,12 +155,12 @@ def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8):
         searches = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "search"]
         if searches:
             t0 = time.time()
-            hits = search.batch([a["query"] for _, a, _ in searches], K)
+            hits = search.batch([a["query"] for _, a, _ in searches], search_k)
             s = (time.time() - t0) / len(searches)
             for (ep, a, c), hs in zip(searches, hits):
                 ep.last_hits = hs
                 texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
-                ep.log("search", {"query": a["query"], "k": K}, {"hits": hs}, s, c)
+                ep.log("search", {"query": a["query"], "k": search_k}, {"hits": hs}, s, c)
 
         decomps = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "decompose"]
         if decomps:
@@ -255,7 +255,8 @@ def to_row(ep, run_info):
         reward = {"total": r, "parts": parts}
     v_in, v_out = getattr(ep, "v_in", 0), getattr(ep, "v_out", 0)
     return {
-        "schema": SCHEMA, "id": c["id"], "dataset": "fever", "split": "dev",
+        "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
+        "id": c["id"], "dataset": "fever", "split": "dev",
         "claim": c["claim"], "gold": gold,
         "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
         "run": run_info,
@@ -291,32 +292,49 @@ if __name__ == "__main__":
     ap.add_argument("--model", default=LOCAL_MODEL, help="verifier base model")
     ap.add_argument("--adapter", default=None, help="verifier LoRA dir(s), as eval_verifier.py --adapter")
     ap.add_argument("--controller", default=BIG_MODEL)
-    ap.add_argument("--n", type=int, default=900)
+    ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
+    ap.add_argument("--search-k", type=int, default=K)
+    ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     a = ap.parse_args()
+    if a.search_k < 1 or a.candidate_pages < 1:
+        ap.error("search-k and candidate-pages must be positive")
+    from utils.fever_eval import manifest_metadata, manifest_tag, validate_resume_ids
+    selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                             ids_file=a.claim_ids)
+    a.n = len(selected)
 
     run = "prompted-" + (adapter_label(a.adapter) if a.adapter else "base")
     run += f"_{a.tag}" if a.tag else ""
+    search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
+    run += f"_{search_tag}"
+    run += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
     os.makedirs(TRACE_DIR, exist_ok=True)
     path = os.path.join(TRACE_DIR, f"fever_dev_{run}_n{a.n}.jsonl")
 
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
-    claims = [c for c in sample_claims(a.n, SEED) if c["id"] not in done]
+            done_ids = [json.loads(line)["id"] for line in f]
+            validate_resume_ids(done_ids, [c["id"] for c in selected])
+            done = set(done_ids)
+    claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
         big = BigModel(a.controller)
-        decomposer = Decomposer(big, cache_path(big.name, a.n))
-        search = FeverSearch()
+        decomposer = Decomposer(big, cache_path(big.name, a.n, claim_ids=a.claim_ids))
+        search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
-                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS}
+                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS,
+                    **manifest_metadata(a.claim_ids)}
+        run_info["policy"] = f"prompted-{search_tag}"
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):
-            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info)
+            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info, search_k=a.search_k)
             with open(path, "a", encoding="utf-8") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")

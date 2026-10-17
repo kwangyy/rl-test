@@ -9,6 +9,8 @@ untrained baseline before anything smarter is built on it:
     python -m agent.agent_loop                                              # base 2B, untrained baseline: acc 0.459
     python -m agent.agent_loop --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints   # SFT: acc 0.759
     python -m agent.agent_loop --n 30 --tag smoke
+    python -m agent.agent_loop --method bm25 --search-k 5
+    python -m agent.agent_loop --method hybrid --search-k 5
 
 Writes verifier/data/traces/fever_dev_<run>.jsonl in docs/trace-format.md (schema 1),
 then prints accuracy and per-claim agreement with the matching untrained baseline file.
@@ -20,16 +22,21 @@ swapped without touching the loop.
 """
 
 import argparse
+from copy import copy
 import json
 import os
 import subprocess
 import sys
 import time
 
+from utils.fever_eval import manifest_metadata, manifest_tag, validate_resume_ids
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 from core import reward as R
+from core.interfaces import Hit
 from retrieval.build_bm25_index import DATA
+from retrieval.fever_retrieval import FeverRetriever
 from verifier.model import (FEVER_LABEL, K_PAGES, LABELS, LOCAL_MODEL, MAX_CITED, MAX_SENTS_PER_PAGE, SEED,
                     adapter_label, gold_sets, label_probs, parse, render, sample_claims)
 
@@ -41,25 +48,32 @@ REWARD_LABEL = {"SUPPORTED": R.SUPPORTED, "REFUTED": R.REFUTED, NEI: R.NEI}
 
 
 class FeverSearch:
-    """interfaces.Search over the page-level FEVER index: the sentences of the
-    top K_PAGES title-match + BM25 pages, page by page, at most k of them.
-    Score is page-level (K_PAGES - page rank), so every sentence of a page ties."""
+    """Search tool: title-match + page BM25 candidates, then ranked sentences.
 
-    def __init__(self):
-        from retrieval.fever_retrieval import FeverRetriever
-        self.r = FeverRetriever()
+    Returns up to k Hit dictionaries using sentence BM25 or hybrid ranking.
 
-    def __call__(self, query, k=K_PAGES * MAX_SENTS_PER_PAGE):
+    Usage:
+        search = FeverSearch(method="bm25")  # or "hybrid"
+        hits = search("Ada Lovelace wrote an algorithm", k=5)
+    """
+
+    def __init__(self, *, method="bm25", candidate_pages=K_PAGES, retriever=None):
+        """Create a retriever, or copy and configure a supplied retriever."""
+        if retriever is None:
+            self.r = FeverRetriever(method=method, candidate_pages=candidate_pages)
+        else:
+            if method not in ("bm25", "hybrid") or candidate_pages < 1:
+                raise ValueError("choose bm25/hybrid and a positive page count")
+            self.r = copy(retriever)
+            self.r.method = method
+            self.r.candidate_pages = candidate_pages
+
+    def __call__(self, query: str, k: int = K_PAGES * MAX_SENTS_PER_PAGE) -> list[Hit]:
+        """Search Protocol: up to k ranked sentences, not k pages."""
         return self.batch([query], k)[0]
 
-    def batch(self, queries, k=K_PAGES * MAX_SENTS_PER_PAGE):
-        out = []
-        for pages in self.r.search_with_titles(queries, k=K_PAGES):
-            hits = [{"page": p, "line": line, "text": text, "score": float(K_PAGES - rank)}
-                    for rank, p in enumerate(pages)
-                    for line, text in self.r.sentences(p)[:MAX_SENTS_PER_PAGE]]
-            out.append(hits[:k])
-        return out
+    def batch(self, queries: list[str], k: int = K_PAGES * MAX_SENTS_PER_PAGE) -> list[list[Hit]]:
+        return self.r.search(queries, k)
 
 
 class LocalVerify:
@@ -106,10 +120,10 @@ def reward_version():
         return None
 
 
-def run_chunk(claims, search, verify, run_info):
+def run_chunk(claims, search, verify, run_info, search_k=None):
     """The fixed policy over a batch of claims: one search, one verify, then commit or abstain."""
     t0 = time.time()
-    hits = search.batch([c["claim"] for c in claims])
+    hits = search.batch([c["claim"] for c in claims], K_PAGES * MAX_SENTS_PER_PAGE if search_k is None else search_k)
     t1 = time.time()
     ids = [[f"{h['page']}:{h['line']}" for h in hs] for hs in hits]
     results = verify.batch([c["claim"] for c in claims], ids)
@@ -129,12 +143,13 @@ def run_chunk(claims, search, verify, run_info):
                                gold_ids, res["evidence"], n_ops)
             reward = {"total": r, "parts": parts}
         rows.append({
-            "schema": SCHEMA, "id": c["id"], "dataset": "fever", "split": "dev",
+            "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
+            "id": c["id"], "dataset": "fever", "split": "dev",
             "claim": c["claim"], "gold": gold,
             "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
             "run": run_info,
             "steps": [
-                {"t": 0, "action": "search", "args": {"query": c["claim"], "k": len(hs)},
+                {"t": 0, "action": "search", "args": {"query": c["claim"], "k": len(hs) if search_k is None else search_k},
                  "result": {"hits": hs}, "seconds": round(s_search, 3)},
                 {"t": 1, "action": "verify", "args": {"claim": c["claim"], "evidence": ev},
                  "result": res, "seconds": round(s_verify, 3)},
@@ -183,13 +198,25 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=LOCAL_MODEL)
     ap.add_argument("--adapter", default=None, help="LoRA dir(s), as eval_verifier.py --adapter")
-    ap.add_argument("--n", type=int, default=900)
+    ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
+    ap.add_argument("--search-k", type=int, default=K_PAGES * MAX_SENTS_PER_PAGE)
+    ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     a = ap.parse_args()
+    if a.search_k < 1 or a.candidate_pages < 1:
+        ap.error("search-k and candidate-pages must be positive")
+    selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                             ids_file=a.claim_ids)
+    a.n = len(selected)
 
     run = "fixed-" + (adapter_label(a.adapter) if a.adapter else "base")
     run += f"_{a.tag}" if a.tag else ""
+    search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
+    run += f"_{search_tag}"
+    run += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
     os.makedirs(TRACE_DIR, exist_ok=True)
     path = os.path.join(TRACE_DIR, f"fever_dev_{run}_n{a.n}.jsonl")
     eval_tag = "local" + (f"+{adapter_label(a.adapter)}" if a.adapter else "")
@@ -198,16 +225,20 @@ if __name__ == "__main__":
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
-    claims = [c for c in sample_claims(a.n, SEED) if c["id"] not in done]
+            done_ids = [json.loads(line)["id"] for line in f]
+            validate_resume_ids(done_ids, [c["id"] for c in selected])
+            done = set(done_ids)
+    claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
-        search = FeverSearch()
+        search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
-        run_info = {"policy": "fixed", "verifier": verify.name, "reward_version": reward_version(), "seed": SEED}
+        run_info = {"policy": "fixed", "verifier": verify.name, "reward_version": reward_version(),
+                    "seed": SEED, **manifest_metadata(a.claim_ids)}
+        run_info["policy"] = f"fixed-{search_tag}"
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):
-            rows = run_chunk(claims[i:i + a.chunk], search, verify, run_info)
+            rows = run_chunk(claims[i:i + a.chunk], search, verify, run_info, search_k=a.search_k)
             with open(path, "a", encoding="utf-8") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")

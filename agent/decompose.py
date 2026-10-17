@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from retrieval.build_bm25_index import DATA
 from verifier.model import BIG_MODEL, SEED, sample_claims
+from utils.fever_eval import manifest_tag, validate_resume_ids
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 CACHE_DIR = os.path.join(DATA, "..", "decompose")
@@ -74,8 +75,9 @@ def first_json(text, kind):
     return obj if isinstance(obj, kind) else None
 
 
-def cache_path(model, n, dataset="fever", split="dev"):
-    return os.path.join(CACHE_DIR, f"{dataset}_{split}_{model.replace('/', '_')}_n{n}.jsonl")
+def cache_path(model, n, dataset="fever", split="dev", claim_ids=None):
+    suffix = f"_{manifest_tag(claim_ids)}" if claim_ids else ""
+    return os.path.join(CACHE_DIR, f"{dataset}_{split}_{model.replace('/', '_')}_n{n}{suffix}.jsonl")
 
 
 class Decomposer:
@@ -115,16 +117,21 @@ class Decomposer:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=BIG_MODEL)
-    ap.add_argument("--n", type=int, default=900)
+    ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
+    ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     a = ap.parse_args()
 
-    path = cache_path(a.model, a.n)
+    claims = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                           ids_file=a.claim_ids)
+    a.n = len(claims)
+    path = cache_path(a.model, a.n, claim_ids=a.claim_ids)
     os.makedirs(CACHE_DIR, exist_ok=True)
-    claims = sample_claims(a.n, SEED)
     done = set()
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            done = {json.loads(line)["id"] for line in f}
+            done_ids = [json.loads(line)["id"] for line in f]
+            validate_resume_ids(done_ids, [c["id"] for c in claims])
+            done = set(done_ids)
     todo = [c for c in claims if c["id"] not in done]
     print(f"{len(done)} done, {len(todo)} to go -> {path}")
     d = Decomposer(BigModel(a.model))

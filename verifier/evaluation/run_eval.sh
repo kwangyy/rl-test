@@ -34,8 +34,18 @@ test -f verifier/data/fever/bm25_index/doc_ids.json || { echo "Missing or incomp
 source .venv/bin/activate
 export TOKENIZERS_PARALLELISM=false
 
-n="${N_CLAIMS:-900}"
-[[ "$n" =~ ^[1-9][0-9]*$ ]] || { echo "N_CLAIMS must be a positive integer" >&2; exit 2; }
+claim_ids="${CLAIM_IDS:-}"
+selection_args=()
+if [[ -n "$claim_ids" ]]; then
+  n="$(python -c 'import sys; from utils.fever_eval import read_id_manifest; print(len(read_id_manifest(sys.argv[1])["ids"]))' "$claim_ids")"
+  selection_args=(--claim-ids "$claim_ids")
+else
+  n="${N_CLAIMS:-900}"
+  [[ "$n" =~ ^[1-9][0-9]*$ ]] || { echo "N_CLAIMS must be a positive integer" >&2; exit 2; }
+  if [[ "$n" == 900 ]]; then
+    claim_ids=verifier/data/eval/fever-dev-900-ids.json
+  fi
+fi
 job_id="${SLURM_JOB_ID:?}"
 run_name="${RUN_NAME:-job-$job_id}"
 [[ "$run_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || { echo "RUN_NAME must use letters, digits, underscore or dash" >&2; exit 2; }
@@ -97,33 +107,34 @@ metrics="$result_dir/metrics.json"
 log="$result_dir/logs/run.log"
 commit="$(git rev-parse HEAD)"
 {
-  echo "job=$job_id run=$run_name commit=$commit n=$n thinking=$thinking prompt_style=$style max_new_tokens=${MAX_NEW_TOKENS:-default} retrieval=titles model=$model checkpoints=${checkpoints:-none} result_dir=$result_dir"
+  echo "job=$job_id run=$run_name commit=$commit n=$n claim_ids=${claim_ids:-implicit-sampling} thinking=$thinking prompt_style=$style max_new_tokens=${MAX_NEW_TOKENS:-default} retrieval=titles model=$model checkpoints=${checkpoints:-none} result_dir=$result_dir"
   echo "started_at=$(date -u +%FT%TZ)"
   srun python -m verifier.evaluation.eval_verifier --model local --n "$n" --retrieval titles \
-    --prompt-style "$style" --output "$output" "${generation_args[@]}" "${adapter_args[@]}"
-  if [[ "$n" == 900 ]]; then
-    python - "$output" verifier/data/eval/fever-dev-900-ids.json <<'PY'
+    --prompt-style "$style" --output "$output" "${generation_args[@]}" "${adapter_args[@]}" "${selection_args[@]}"
+  if [[ -n "$claim_ids" ]]; then
+    python - "$output" "$claim_ids" <<'PY'
 import json
 import sys
 from pathlib import Path
 rows = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines() if line.strip()]
 expected = json.loads(Path(sys.argv[2]).read_text())['ids']
 actual = [row['id'] for row in rows]
-if len(actual) != 900 or len(set(actual)) != 900 or set(actual) != set(expected):
-    raise SystemExit('900-claim run does not match the frozen FEVER dev ID manifest')
+if len(actual) != len(expected) or len(set(actual)) != len(expected) or set(actual) != set(expected):
+    raise SystemExit('run does not match the selected frozen FEVER dev ID manifest')
 PY
   fi
   python -m verifier.evaluation.score_predictions "$output" > "$metrics"
   echo "finished_at=$(date -u +%FT%TZ)"
   echo "predictions=$output metrics=$metrics"
 } 2>&1 | tee "$log"
-python - "$result_dir/manifest.json" "$job_id" "$run_name" "$commit" "$model" "$checkpoints" "$thinking" "$style" "$n" "$output" "$metrics" "$log" "$condition" "$result_dir" "${MAX_NEW_TOKENS:-}" <<'PY'
+python - "$result_dir/manifest.json" "$job_id" "$run_name" "$commit" "$model" "$checkpoints" "$thinking" "$style" "$n" "$output" "$metrics" "$log" "$condition" "$result_dir" "${MAX_NEW_TOKENS:-}" "$claim_ids" <<'PY'
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 (_, manifest, job_id, run_name, commit, model, checkpoints, thinking,
- style, n, predictions, metrics, log, condition, result_dir, max_new_tokens) = sys.argv
+ style, n, predictions, metrics, log, condition, result_dir, max_new_tokens, claim_ids) = sys.argv
 record = {
     'job_id': job_id, 'run_name': run_name, 'commit': commit,
     'model': model, 'checkpoints': checkpoints or None,
@@ -135,6 +146,8 @@ record = {
         'cot_native': 1024,
     }[style],
     'condition': condition, 'result_dir': result_dir,
+    'claim_ids_manifest': claim_ids or None,
+    'claim_ids_sha256': hashlib.sha256(Path(claim_ids).read_bytes()).hexdigest() if claim_ids else None,
     'n_claims': int(n), 'predictions': predictions, 'metrics': metrics,
     'log': log,
 }

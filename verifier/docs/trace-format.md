@@ -106,3 +106,12 @@ rows (the fixed policy) stay valid; every field below is an addition.
 - A `verify` step's verdict can be judged on a sub-claim. The episode's
   `final` then combines them: any REFUTED refutes, all SUPPORTED supports,
   otherwise NOT_ENOUGH_INFO.
+
+## Schema 3 (2026-10-16): explicit frozen evaluation selection
+
+Runs selected with `--claim-ids` add `run.claim_ids_manifest` and
+`run.claim_ids_sha256`. Their trace filename includes the manifest stem and
+the first eight hash characters, preventing accidental reuse of another
+set's output. Fixed, prompted and decomposition policies use schema 3 for
+these runs. Without explicit selection, existing schema 1/2 behavior and
+historical trace rows remain unchanged. See the [evaluation split policy](data.md#6-frozen-development-calibration-and-holdout-sets).
