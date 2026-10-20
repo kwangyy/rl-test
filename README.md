@@ -20,11 +20,11 @@ This repository studies evidence-grounded claim verification on FEVER. A verifie
 | [`verifier/evaluation/`](verifier/evaluation/) | Shared evaluator, Slurm launcher and `results/` |
 | [`retrieval/`](retrieval/) | FEVER index and search code |
 | [`core/`](core/) | Shared reward and interfaces |
-| [`agent/`](agent/) | Search/verify loop and controller scaffold |
+| [`agent/`](agent/) | Search/verify loop, controller scaffold and live event-stream server |
 | [`utils/`](utils/) | Data preparation and experiment helpers |
 | [`AGENTS.md`](AGENTS.md) | Conventions for collaborators and coding agents |
 
-Detailed document map: [data and downloads](verifier/docs/data.md), [system plan](verifier/docs/plan.md), [prompted baseline](verifier/docs/prompted-baseline-results.md), [SFT](verifier/docs/sft-probe.md), [CoT teacher rejection audit](verifier/docs/cot-teacher-rejection-audit.md), [GRPO](verifier/docs/grpo-results.md), [agent traces](verifier/docs/trace-format.md), [decomposer](verifier/docs/decompose-results.md), [agent loop notes](verifier/docs/agent-loop-notes.md), [models](verifier/docs/models.md), and [related work](verifier/docs/related-work.md).
+Detailed document map: [data and downloads](verifier/docs/data.md), [system plan](verifier/docs/plan.md), [prompted baseline](verifier/docs/prompted-baseline-results.md), [SFT](verifier/docs/sft-probe.md), [CoT teacher rejection audit](verifier/docs/cot-teacher-rejection-audit.md), [GRPO](verifier/docs/grpo-results.md), [agent traces](verifier/docs/trace-format.md), [decomposer](verifier/docs/decompose-results.md), [agent loop notes](verifier/docs/agent-loop-notes.md), [live event-stream backend](verifier/docs/live-backend.md), [models](verifier/docs/models.md), and [related work](verifier/docs/related-work.md).
 
 ---
 

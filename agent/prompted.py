@@ -156,54 +156,58 @@ def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, sear
         if not live:
             break
         decisions = list(pool.map(lambda ep: decide(ep, big), live))
-
-        searches = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "search"]
-        if searches:
-            t0 = time.time()
-            hits = search.batch([a["query"] for _, a, _ in searches], search_k)
-            s = (time.time() - t0) / len(searches)
-            for (ep, a, c), hs in zip(searches, hits):
-                ep.last_hits = hs
-                texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
-                ep.log("search", {"query": a["query"], "k": search_k}, {"hits": hs}, s, c)
-
-        decomps = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "decompose"]
-        if decomps:
-            def split(ep):
-                t0 = time.time()
-                return decomposer.run(ep.c["claim"]), time.time() - t0
-            for (ep, a, c), (g, s) in zip(decomps, pool.map(lambda x: split(x[0]), decomps)):
-                ep.subclaims = g["subclaims"]
-                ep.ctl_in += g["tokens_in"]
-                ep.ctl_out += g["tokens_out"]
-                ep.log("decompose", {"claim": ep.c["claim"]}, {"subclaims": g["subclaims"]}, s,
-                       {**c, "decompose_tokens_in": g["tokens_in"], "decompose_tokens_out": g["tokens_out"]})
-
-        verifies = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "verify"]
-        if verifies:
-            t0 = time.time()
-            targets = [ep.subclaims[a["subclaim"]] if a.get("subclaim") is not None else ep.c["claim"]
-                       for ep, a, _ in verifies]
-            evs = [ep.pool() for ep, _, _ in verifies]
-            results = verify.batch(targets, evs)
-            s = (time.time() - t0) / len(verifies)
-            for (ep, a, c), target, ev, res in zip(verifies, targets, evs, results):
-                ep.v_in = getattr(ep, "v_in", 0) + res["_tokens"][0]
-                ep.v_out = getattr(ep, "v_out", 0) + res["_tokens"][1]
-                res = {k: v for k, v in res.items() if k != "_tokens"}
-                ep.cited = list(dict.fromkeys(ep.cited + res["evidence"]))
-                if a.get("subclaim") is None:
-                    ep.claim_verdict = res
-                else:
-                    ep.sub_verdicts[a["subclaim"]] = res
-                ep.log("verify", {"claim": target, "evidence": ev, "subclaim": a.get("subclaim")}, res, s, c)
-
-        for ep, (a, c) in zip(live, decisions):
-            if a["action"] in ("commit", "abstain"):
-                ep.log(a["action"], {}, {}, 0.0, c)
-                ep.end = a["action"]
+        act(live, decisions, search, verify, decomposer, pool, search_k)
     pool.shutdown()
     return [to_row(ep, run_info) for ep in eps]
+
+
+def act(live, decisions, search, verify, decomposer, pool, search_k=K):
+    """Carry out one round of decisions, one per live episode, batching searches and verifies."""
+    searches = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "search"]
+    if searches:
+        t0 = time.time()
+        hits = search.batch([a["query"] for _, a, _ in searches], search_k)
+        s = (time.time() - t0) / len(searches)
+        for (ep, a, c), hs in zip(searches, hits):
+            ep.last_hits = hs
+            ep.texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
+            ep.log("search", {"query": a["query"], "k": search_k}, {"hits": hs}, s, c)
+
+    decomps = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "decompose"]
+    if decomps:
+        def split(ep):
+            t0 = time.time()
+            return decomposer.run(ep.c["claim"]), time.time() - t0
+        for (ep, a, c), (g, s) in zip(decomps, pool.map(lambda x: split(x[0]), decomps)):
+            ep.subclaims = g["subclaims"]
+            ep.ctl_in += g["tokens_in"]
+            ep.ctl_out += g["tokens_out"]
+            ep.log("decompose", {"claim": ep.c["claim"]}, {"subclaims": g["subclaims"]}, s,
+                   {**c, "decompose_tokens_in": g["tokens_in"], "decompose_tokens_out": g["tokens_out"]})
+
+    verifies = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "verify"]
+    if verifies:
+        t0 = time.time()
+        targets = [ep.subclaims[a["subclaim"]] if a.get("subclaim") is not None else ep.c["claim"]
+                   for ep, a, _ in verifies]
+        evs = [ep.pool() for ep, _, _ in verifies]
+        results = verify.batch(targets, evs)
+        s = (time.time() - t0) / len(verifies)
+        for (ep, a, c), target, ev, res in zip(verifies, targets, evs, results):
+            ep.v_in = getattr(ep, "v_in", 0) + res["_tokens"][0]
+            ep.v_out = getattr(ep, "v_out", 0) + res["_tokens"][1]
+            res = {k: v for k, v in res.items() if k != "_tokens"}
+            ep.cited = list(dict.fromkeys(ep.cited + res["evidence"]))
+            if a.get("subclaim") is None:
+                ep.claim_verdict = res
+            else:
+                ep.sub_verdicts[a["subclaim"]] = res
+            ep.log("verify", {"claim": target, "evidence": ev, "subclaim": a.get("subclaim")}, res, s, c)
+
+    for ep, (a, c) in zip(live, decisions):
+        if a["action"] in ("commit", "abstain"):
+            ep.log(a["action"], {}, {}, 0.0, c)
+            ep.end = a["action"]
 
 
 def combine(sub_verdicts, n):

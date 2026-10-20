@@ -129,39 +129,42 @@ def run_chunk(claims, search, verify, run_info, search_k=None):
     results = verify.batch([c["claim"] for c in claims], ids)
     t2 = time.time()
     s_search, s_verify = (t1 - t0) / len(claims), (t2 - t1) / len(claims)
-    rows = []
-    for c, hs, ev, res in zip(claims, hits, ids, results):
-        tin, tout = res.pop("_tokens")
-        end = "abstain" if res["verdict"] == NEI else "commit"
-        gold = FEVER_LABEL[c["label"]]
-        gs = gold_sets(c)
-        gold_ids = sorted({f"{p}:{l}" for s in gs for p, l in s})
-        n_ops = 2
-        reward = None
-        if res["verdict"] is not None and res["confidence"] is not None:
-            r, parts = R.total(REWARD_LABEL[gold], REWARD_LABEL[res["verdict"]], res["confidence"],
-                               gold_ids, res["evidence"], n_ops)
-            reward = {"total": r, "parts": parts}
-        rows.append({
-            "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
-            "id": c["id"], "dataset": "fever", "split": "dev",
-            "claim": c["claim"], "gold": gold,
-            "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
-            "run": run_info,
-            "steps": [
-                {"t": 0, "action": "search", "args": {"query": c["claim"], "k": len(hs) if search_k is None else search_k},
-                 "result": {"hits": hs}, "seconds": round(s_search, 3)},
-                {"t": 1, "action": "verify", "args": {"claim": c["claim"], "evidence": ev},
-                 "result": res, "seconds": round(s_verify, 3)},
-                {"t": 2, "action": end, "args": {}, "result": {}, "seconds": 0.0},
-            ],
-            "final": {"verdict": res["verdict"], "evidence": res["evidence"],
-                      "confidence": res["confidence"], "ended_by": end},
-            "cost": {"n_search": 1, "n_decompose": 0, "n_verify": 1, "n_ops": n_ops,
-                     "tokens_in": tin, "tokens_out": tout, "seconds": round(s_search + s_verify, 3)},
-            "reward": reward,
-        })
-    return rows
+    return [to_row(c, hs, ev, res, run_info, s_search, s_verify, search_k)
+            for c, hs, ev, res in zip(claims, hits, ids, results)]
+
+
+def to_row(c, hs, ev, res, run_info, s_search, s_verify, search_k=None):
+    """One trace row from a claim's search hits, the evidence ids verified and the verify result."""
+    tin, tout = res.pop("_tokens")
+    end = "abstain" if res["verdict"] == NEI else "commit"
+    gold = FEVER_LABEL[c["label"]]
+    gs = gold_sets(c)
+    gold_ids = sorted({f"{p}:{l}" for s in gs for p, l in s})
+    n_ops = 2
+    reward = None
+    if res["verdict"] is not None and res["confidence"] is not None:
+        r, parts = R.total(REWARD_LABEL[gold], REWARD_LABEL[res["verdict"]], res["confidence"],
+                           gold_ids, res["evidence"], n_ops)
+        reward = {"total": r, "parts": parts}
+    return {
+        "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
+        "id": c["id"], "dataset": "fever", "split": "dev",
+        "claim": c["claim"], "gold": gold,
+        "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
+        "run": run_info,
+        "steps": [
+            {"t": 0, "action": "search", "args": {"query": c["claim"], "k": len(hs) if search_k is None else search_k},
+             "result": {"hits": hs}, "seconds": round(s_search, 3)},
+            {"t": 1, "action": "verify", "args": {"claim": c["claim"], "evidence": ev},
+             "result": res, "seconds": round(s_verify, 3)},
+            {"t": 2, "action": end, "args": {}, "result": {}, "seconds": 0.0},
+        ],
+        "final": {"verdict": res["verdict"], "evidence": res["evidence"],
+                  "confidence": res["confidence"], "ended_by": end},
+        "cost": {"n_search": 1, "n_decompose": 0, "n_verify": 1, "n_ops": n_ops,
+                 "tokens_in": tin, "tokens_out": tout, "seconds": round(s_search + s_verify, 3)},
+        "reward": reward,
+    }
 
 
 def report(path, archived_eval_path):

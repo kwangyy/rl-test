@@ -14,4 +14,7 @@ bm25s
 PyStemmer
 openai
 python-dotenv
+fastapi
+uvicorn
+httpx
 pytest
