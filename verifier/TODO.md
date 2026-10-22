@@ -47,4 +47,5 @@ CoT SFT data preparation can proceed in parallel with step 1; it is a separate e
 - [ ] Agent loop (AG-2): work through the next steps in [agent-loop-notes.md](docs/agent-loop-notes.md#7-next-steps) — new fixed baselines on ranked search, prompted controller v2/v3, decomposition fixes, and the multi-turn GRPO cutoff fix.
 - [ ] Train or evaluate a real-data controller only if simple fixed policies leave a measurable accuracy–cost gap. Check retrieval misses and transfer to SciFact / AVeriTeC.
 - [ ] Prepare the team failure audit, shortcut checks, transfer results and final demo from the same evaluation definitions.
+- [ ] Run the prepared [300-claim shortcut diagnostic](docs/data.md#7-retrieval-use-shortcut-diagnostic) via `verifier.evaluation.shortcut_test` on agreed checkpoints; compare verdict changes, NEI transitions and confidence changes.
 - [ ] Demo backend (AG-2): `agent/server.py` streams fixed and prompted runs and replays saved traces over SSE ([live-backend.md](docs/live-backend.md)). Remaining: a live smoke test on the GPU machine, agreeing the event format with AG-3, and streaming the multi-turn GRPO model.
