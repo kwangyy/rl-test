@@ -131,3 +131,22 @@ python -m verifier.evaluation.eval_verifier --model local --retrieval titles \
 ```
 
 For Slurm, export `CLAIM_IDS=<ID-file>` to `verifier/evaluation/run.sbatch`; it overrides `N_CLAIMS`.
+
+## 7. Retrieval-use shortcut diagnostic
+
+`data/eval/fever-shortcut-dev-300-ids.json` freezes 300 dev claims (100 per label)
+for normal/empty/shuffled contexts: 900 predictions per checkpoint. Non-NEI normal contexts
+contain complete gold evidence; shuffled donors share no context or gold evidence.
+
+```bash
+# Reproduce the saved set without overwriting it.
+python -m utils.build_shortcut_set --n 300 --seed 0 --output /tmp/fever-shortcut-dev-300-ids.json
+# From the repo root; add --adapter <checkpoint-dir> for SFT.
+python -m verifier.evaluation.shortcut_test \
+  --output-dir verifier/evaluation/results/baseline-direct-cap1024/shortcut-dev300-run1
+```
+
+Use a new output directory per run. Outputs include per-condition predictions,
+shared metrics, paired verdict/NEI/confidence changes, a manifest and a log.
+All conditions are scored against the original FEVER labels. Compare accuracy,
+verdicts and confidence across contexts to assess retrieval dependence.

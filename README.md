@@ -88,6 +88,20 @@ To evaluate a full set, pass `--claim-ids <ID-file>` (or `CLAIM_IDS=<ID-file>` f
   python -m unittest verifier.tests.test_score_predictions
   ```
 
+- [Shortcut diagnostic](verifier/docs/data.md#7-retrieval-use-shortcut-diagnostic): 300 dev claims; builder in `utils/`, runner in `verifier/evaluation/`.
+
+Paired metrics compare empty and shuffled evidence separately against normal evidence, keeping the original FEVER labels.
+
+| Metric | Meaning |
+|---|---|
+| `n` | Total claims compared. |
+| `valid_pairs` | Claims with a recognized verdict in both conditions. |
+| `verdict_change_rate_valid_pairs` | Fraction of valid pairs whose verdict changed. |
+| `normal_correct_non_nei_n` | SUPPORTED/REFUTED claims answered correctly with normal evidence. |
+| `normal_correct_non_nei_to_nei_rate` | Fraction of that group switching to NEI. |
+| `accuracy_delta` | Altered-context accuracy minus normal accuracy; −0.20 means a 20 percentage point drop. |
+| `confidence_delta` | Mean altered minus normal confidence, separately for JSON `stated_conf` and verdict-token `token_conf`; uses pairs where both values are available. |
+
 ### 4. Experiment Catalogue
 
 | Configuration in `verifier/experiments/` | Description |
