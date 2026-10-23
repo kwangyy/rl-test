@@ -229,3 +229,37 @@ def test_trace_endpoints(tmp_path):
     assert c.get("/api/traces/fever_dev_fake_n2.jsonl/99").status_code == 404
     assert c.get("/api/traces/..%2Fsecret.jsonl").status_code == 404
     assert c.get("/api/traces/nope.jsonl").status_code == 404
+
+
+def test_built_demo_shares_server_with_api(tmp_path, monkeypatch):
+    from agent import server
+
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    (demo / "index.html").write_text('<script src="/app.js"></script>', encoding="utf-8")
+    (demo / "app.js").write_text('console.log("demo");', encoding="utf-8")
+    monkeypatch.setattr(server, "DEMO_DIR", demo)
+    c = client(tmp_path)
+
+    assert c.get("/").text == '<script src="/app.js"></script>'
+    asset = c.get("/app.js")
+    assert asset.status_code == 200 and "javascript" in asset.headers["content-type"]
+    assert c.get("/api/health").json()["status"] == "ok"
+    events = parse_sse(c.get("/api/live", params={"id": 7}).text)
+    assert events[-1]["event"] == "final"
+    assert c.get("/docs").status_code == 200
+    assert c.get("/api/missing").status_code == 404
+    assert c.get("/missing.js").status_code == 404
+
+
+@pytest.mark.parametrize("empty_directory", [False, True])
+def test_api_runs_without_built_demo(tmp_path, monkeypatch, empty_directory):
+    from agent import server
+
+    demo = tmp_path / "demo"
+    if empty_directory:
+        demo.mkdir()
+    monkeypatch.setattr(server, "DEMO_DIR", demo)
+    c = client(tmp_path, live=False)
+    assert c.get("/api/health").json()["live"] is False
+    assert c.get("/").status_code == 404

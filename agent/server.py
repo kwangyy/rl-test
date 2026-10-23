@@ -2,7 +2,7 @@
 
     python -m agent.server                                     # base 2B verifier, http://127.0.0.1:8000
     python -m agent.server --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
-    python -m agent.server --no-live                           # replay saved traces only; no GPU, index or API key
+    python -m agent.server --no-live                           # built UI + replay; no Bun, GPU, index or API key
 
 Endpoints (spec and event schema: verifier/docs/live-backend.md):
 
@@ -24,16 +24,19 @@ import argparse
 import json
 import os
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from agent import stream
 from agent.agent_loop import TRACE_DIR, reward_version
 from verifier.model import BIG_MODEL, K_PAGES, LOCAL_MODEL, SEED
 
 POLICIES = ("fixed", "prompted")
+DEMO_DIR = Path(__file__).resolve().parent.parent / "demo" / "dist"
 
 
 class Backends:
@@ -42,9 +45,11 @@ class Backends:
     Tests pass ready-made objects instead; anything passed is used as is."""
 
     def __init__(self, model=LOCAL_MODEL, adapter=None, method="bm25", candidate_pages=K_PAGES,
-                 controller=BIG_MODEL, search=None, verify=None, big=None, decomposer=None, claims=None):
+                 controller=BIG_MODEL, search=None, verify=None, big=None, decomposer=None, claims=None,
+                 *, max_new_tokens=160):
         self.model, self.adapter, self.method, self.candidate_pages = model, adapter, method, candidate_pages
         self.controller = controller
+        self.max_new_tokens = max_new_tokens
         self._search, self._verify, self._big, self._decomposer, self._claims = search, verify, big, decomposer, claims
         self.build = threading.Lock()
 
@@ -65,7 +70,7 @@ class Backends:
         with self.build:
             if self._verify is None:
                 from agent.agent_loop import LocalVerify
-                self._verify = LocalVerify(search, self.model, self.adapter)
+                self._verify = LocalVerify(search, self.model, self.adapter, max_new_tokens=self.max_new_tokens)
             return self._verify
 
     def controller_pair(self):
@@ -130,7 +135,7 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
         return {"status": "ok", "live": live, "policies": list(POLICIES) if live else [],
                 "loaded": backends.loaded, "model": backends.model, "adapter": backends.adapter,
                 "method": backends.method, "candidate_pages": backends.candidate_pages,
-                "controller": backends.controller}
+                "controller": backends.controller, "max_new_tokens": backends.max_new_tokens}
 
     @app.get("/api/live")
     def run_live(claim: str | None = None, id: str | None = None,
@@ -166,12 +171,13 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
                 search, verify = backends.search(), backends.verify()
                 tag = f"{backends.method}-p{backends.candidate_pages}-k{search_k}"
                 run_info = {"policy": f"fixed-{tag}", "verifier": verify.name,
-                            "reward_version": reward_version(), "seed": SEED}
+                            "reward_version": reward_version(), "seed": SEED, "max_new_tokens": backends.max_new_tokens}
                 if policy == "fixed":
                     yield from stream.stream_fixed(c, search, verify, run_info, search_k)
                 else:
                     big, decomposer = backends.controller_pair()
                     run_info = {"policy": f"prompted-{tag}", "controller": big.name, "verifier": verify.name,
+                                "max_new_tokens": backends.max_new_tokens,
                                 "reward_version": reward_version(), "seed": SEED,
                                 "max_steps": stream.prompted.MAX_STEPS,
                                 "controller_prompt": stream.prompted.CONTROLLER_PROMPT}
@@ -219,6 +225,10 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
         return StreamingResponse(sse(guarded(stream.replay(row, delay))), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    # Mount last so the built UI cannot shadow the API or interactive API docs.
+    if (DEMO_DIR / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=DEMO_DIR, html=True), name="demo")
+
     return app
 
 
@@ -229,6 +239,7 @@ if __name__ == "__main__":
     ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
     ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     ap.add_argument("--controller", default=BIG_MODEL, help="big model for policy=prompted (OpenRouter)")
+    ap.add_argument("--max-new-tokens", type=int, default=160, help="verifier output token limit (default: 160)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--cors", nargs="*", default=["*"], help="allowed browser origins")
@@ -237,7 +248,10 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.candidate_pages < 1:
         ap.error("candidate-pages must be positive")
+    if a.max_new_tokens < 1:
+        ap.error("max-new-tokens must be positive")
     import uvicorn
-    app = create_app(Backends(a.model, a.adapter, a.method, a.candidate_pages, a.controller),
+    app = create_app(Backends(a.model, a.adapter, a.method, a.candidate_pages, a.controller,
+                             max_new_tokens=a.max_new_tokens),
                      live=not a.no_live, allow_reserved=a.allow_reserved, cors=a.cors)
     uvicorn.run(app, host=a.host, port=a.port)

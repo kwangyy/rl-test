@@ -24,6 +24,7 @@ swapped without touching the loop.
 import argparse
 from copy import copy
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -81,9 +82,9 @@ class LocalVerify:
     numbered E1..En in the order given, the model's cited E-ids are mapped back
     to "page:line", and confidence is the verdict-token probability."""
 
-    def __init__(self, search, model=LOCAL_MODEL, adapter=None):
+    def __init__(self, search, model=LOCAL_MODEL, adapter=None, *, max_new_tokens=160):
         from verifier.model import LocalModel
-        self.m = LocalModel(model, adapter=adapter)
+        self.m = LocalModel(model, adapter=adapter, max_new_tokens=max_new_tokens)
         self.name = self.m.name
         self.r = search.r
 
@@ -101,6 +102,9 @@ class LocalVerify:
         out = []
         for s, g in zip(shown, gens):
             obj, ok = parse(g["text"])
+            if not ok["verdict"]:
+                logging.getLogger(__name__).warning(
+                    "Invalid verifier output (%d tokens, checks=%s): %r", g["out_tokens"], ok, g["text"])
             by_eid = {eid: f"{p}:{line}" for eid, p, line, _ in s}
             verdict = obj.get("verdict") if ok["verdict"] else None
             cited = [by_eid[e] for e in (obj.get("evidence") or []) if ok["evidence"] and e in by_eid][:MAX_CITED]

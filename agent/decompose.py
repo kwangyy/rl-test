@@ -77,21 +77,24 @@ def load_env():
 
 
 class BigModel:
-    """Text-in, text-out calls to the big model on OpenRouter."""
+    """Text-in, text-out calls to an OpenAI-compatible controller API."""
 
     def __init__(self, name=BIG_MODEL, max_tokens=200):
         from openai import OpenAI
         load_env()
-        self.client = OpenAI(base_url="https://openrouter.ai/api/v1",
-                             api_key=os.environ["OPENROUTER_API_KEY"], max_retries=3)
+        base_url = os.getenv("CONTROLLER_BASE_URL", "https://openrouter.ai/api/v1")
+        key_env = os.getenv("CONTROLLER_API_KEY_ENV", "OPENROUTER_API_KEY")
+        self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=3)
         self.name = name
         self.max_tokens = max_tokens
 
     def __call__(self, system, user):
+        options = ({"temperature": 0, "seed": SEED, "extra_body": {"reasoning": {"enabled": False}}}
+                   if self.client.base_url.host == "openrouter.ai" else {"reasoning_effort": "none"})
         r = self.client.chat.completions.create(
-            model=self.name, temperature=0, seed=SEED, max_tokens=self.max_tokens,
+            model=self.name, max_tokens=self.max_tokens,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            extra_body={"reasoning": {"enabled": False}},
+            **options,
         )
         return {"text": r.choices[0].message.content or "",
                 "in_tokens": r.usage.prompt_tokens, "out_tokens": r.usage.completion_tokens}

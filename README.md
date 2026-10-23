@@ -21,10 +21,44 @@ This repository studies evidence-grounded claim verification on FEVER. A verifie
 | [`retrieval/`](retrieval/) | FEVER index and search code |
 | [`core/`](core/) | Shared reward and interfaces |
 | [`agent/`](agent/) | Search/verify loop, controller scaffold and live event-stream server |
+| [`demo/`](demo/) | React + TypeScript + Tailwind demo; Bun development tooling and prebuilt `dist/` served by FastAPI |
 | [`utils/`](utils/) | Data preparation and experiment helpers |
 | [`AGENTS.md`](AGENTS.md) | Conventions for collaborators and coding agents |
 
 Detailed document map: [data and downloads](verifier/docs/data.md), [system plan](verifier/docs/plan.md), [prompted baseline](verifier/docs/prompted-baseline-results.md), [SFT](verifier/docs/sft-probe.md), [CoT teacher rejection audit](verifier/docs/cot-teacher-rejection-audit.md), [GRPO](verifier/docs/grpo-results.md), [agent traces](verifier/docs/trace-format.md), [decomposer](verifier/docs/decompose-results.md), [agent loop notes](verifier/docs/agent-loop-notes.md), [live event-stream backend](verifier/docs/live-backend.md), [models](verifier/docs/models.md), and [related work](verifier/docs/related-work.md).
+
+## Frontend demo
+
+The `demo/` directory contains the React app. The prebuilt `demo/dist/` is included in version control, so running the demo requires only the project's Python environment. From the repository root:
+
+```bash
+python -m agent.server --no-live
+```
+
+FastAPI serves the built UI and `/api/*` together; there is no Bun process or separate proxy to run. Replay uses committed traces, so it needs no GPU, index or API key. Start the Python server without `--no-live` to enable live claims; see [backend setup and requirements](verifier/docs/live-backend.md#22-run-it).
+
+The live verifier allows 160 output tokens; override with `--max-new-tokens`. Invalid replies are logged in the server terminal.
+
+For another controller API, set `CONTROLLER_BASE_URL` and `CONTROLLER_API_KEY_ENV` (the name of its key variable) in root `.env`, then select the model with `--controller`.
+
+For frontend development, install Bun 1.4.2 or newer, keep the Python server running, and use a second terminal:
+
+```bash
+bun install --cwd demo --frozen-lockfile
+bun run --cwd demo dev
+```
+
+Bun serves the source and proxies `/api/*` to `http://127.0.0.1:8000`, including SSE streams. Set `API_URL` on the Bun process to use another backend; `PORT` changes the Bun port. FastAPI still serves the last built copy at port 8000. If `demo/dist/index.html` is absent,
+FastAPI serves only the API.
+
+Before committing frontend changes, run:
+
+```bash
+bun run --cwd demo check
+bun run --cwd demo build
+```
+
+Include the updated `demo/dist/` files in the same commit as the source. The production build uses stable `app.js` and `app.css` filenames and removes obsolete files after success.
 
 ---
 
