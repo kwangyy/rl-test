@@ -232,20 +232,34 @@ def combine(sub_verdicts, n):
     return {"verdict": NEI, "evidence": [], "confidence": max(nei) if nei else None}
 
 
+FINAL_RULE = "v2"  # v1: any full-claim verdict beat the sub-claims; v2: see final_answer
+
+
 def final_answer(ep):
-    """commit and budget answer with the latest verdict on the claim, else the sub-claims';
-    abstain answers NOT_ENOUGH_INFO with the verifier's probability of that label."""
+    """commit and budget answer with the latest verdict on the claim or the combined
+    sub-claim verdicts; abstain answers NOT_ENOUGH_INFO with the verifier's probability of that label.
+
+    When both exist, the combined sub-claim answer wins only when it is decisive
+    (SUPPORTED/REFUTED) and more confident than the full-claim answer, so it never
+    overrides a firmer NEI (as the v2 controller prompt asks). v1 always took the full-claim verdict, which threw
+    away a correct REFUTED from the sub-claims (docs/agent-loop-notes.md section 4). `source`
+    records which side answered."""
     v = ep.claim_verdict
     if ep.end == "abstain":
         conf = v["token_prob"].get(NEI) if v and v.get("token_prob") else None
-        return {"verdict": NEI, "evidence": [], "confidence": conf}
-    if v and v["verdict"]:
-        return {"verdict": v["verdict"], "evidence": v["evidence"], "confidence": v["confidence"]}
-    if ep.subclaims:
-        combined = combine(ep.sub_verdicts, len(ep.subclaims))
-        if combined:
-            return combined
-    return {"verdict": None, "evidence": [], "confidence": None}
+        return {"verdict": NEI, "evidence": [], "confidence": conf, "source": "abstain"}
+    full = ({"verdict": v["verdict"], "evidence": v["evidence"], "confidence": v["confidence"]}
+            if v and v["verdict"] else None)
+    parts = combine(ep.sub_verdicts, len(ep.subclaims)) if ep.subclaims else None
+    if full and parts:
+        if parts["verdict"] != NEI and (parts["confidence"] or 0) > (full["confidence"] or 0):
+            return {**parts, "source": "subclaims"}
+        return {**full, "source": "claim"}
+    if full:
+        return {**full, "source": "claim"}
+    if parts:
+        return {**parts, "source": "subclaims"}
+    return {"verdict": None, "evidence": [], "confidence": None, "source": None}
 
 
 def to_row(ep, run_info):
@@ -339,6 +353,7 @@ if __name__ == "__main__":
         verify = LocalVerify(search, a.model, a.adapter)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
                     "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS, "controller_prompt": CONTROLLER_PROMPT,
+                    "decomposer_prompt": decomposer.prompt, "final_rule": FINAL_RULE,
                     **manifest_metadata(a.claim_ids)}
         run_info["policy"] = f"prompted-{search_tag}"
         t0 = time.time()

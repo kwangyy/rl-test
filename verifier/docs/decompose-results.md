@@ -5,6 +5,12 @@ AG-2. Code: `agent/decompose.py` (the decomposer and its cache),
 SFT adapter (`sft-direct-from-base-qwen3p5-2b-5895-samples/run1`), on the
 same 900 FEVER dev claims and title-match retrieval as the fixed policy.
 
+> **Update 2026-10-17:** this page records decomposer prompt v1 on the old
+> page-order search. Prompt v2, gated policies and results by claim length,
+> all on the new ranked search, are in
+> [agent-loop-notes.md](agent-loop-notes.md#fixes-and-rerun-2026-10-17).
+> No configuration beats the full claim.
+
 ## Decomposer
 
 `qwen/qwen3.8-flash`, temperature 0, two-example prompt. Cached at

@@ -110,6 +110,10 @@ rows (the fixed policy) stay valid; every field below is an addition.
   otherwise NOT_ENOUGH_INFO. In the prompted controller this happens only when
   the full claim was never verified; any full-claim verdict takes precedence
   (a known flaw, see [agent loop notes](agent-loop-notes.md#flaws-that-would-hide-a-gain-on-big-claims)).
+  Rows with `run.final_rule: "v2"` (2026-10-17) use the combined sub-claim
+  answer when it is decisive and more confident, and record `final.source`
+  (`claim`, `subclaims` or `abstain`). `run.decomposer_prompt` records the
+  decomposer prompt version.
 
 ## Schema 3 (2026-10-16): explicit frozen evaluation selection
 

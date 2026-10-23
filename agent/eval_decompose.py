@@ -31,7 +31,7 @@ import os
 import time
 
 from agent.agent_loop import TRACE_DIR, FeverSearch, LocalVerify, reward_version
-from agent.decompose import Decomposer, cache_path
+from agent.decompose import DEFAULT_PROMPT, PROMPTS, Decomposer, cache_path
 from agent.prompted import NEI, Episode, to_row
 from verifier.model import (BIG_MODEL, K_PAGES, LABELS, LOCAL_MODEL, MAX_SENTS_PER_PAGE, SEED, adapter_label,
                             sample_claims)
@@ -173,6 +173,43 @@ def compare(runs, ids):
               f"breaks {sum(ok(base, i) and not ok(n, i) for i in ids)}")
 
 
+GATE = 0.70  # decompose only when the full claim is NEI or below this confidence
+
+
+def gated(full_row, policy_row, gate=GATE):
+    """(verdict, triggered): keep the full-claim answer when it is decisive and confident,
+    otherwise fall back to the decompose policy. Scored offline from the two traces."""
+    f = full_row["final"]
+    if f["verdict"] not in (None, NEI) and (f["confidence"] or 0) >= gate:
+        return f["verdict"], False
+    return policy_row["final"]["verdict"], True
+
+
+def length_bucket(claim):
+    w = len(claim.split())
+    return "<=7" if w <= 7 else "8-10" if w <= 10 else "11-14" if w <= 14 else "15+"
+
+
+def compare_gated_and_by_length(runs, ids, gate=GATE):
+    """Correct answers by claim length, for every policy and its gated version."""
+    names = list(runs)
+    pols = names[1:]
+    buckets = ["<=7", "8-10", "11-14", "15+"]
+    by = {b: [i for i in ids if length_bucket(runs["full"][i]["claim"]) == b] for b in buckets + ["all"]}
+    by["all"] = list(ids)
+    ok = lambda n, i: runs[n][i]["final"]["verdict"] == runs[n][i]["gold"]
+    gok = lambda n, i: gated(runs["full"][i], runs[n][i], gate)[0] == runs[n][i]["gold"]
+    cols = names + [f"gated-{p}" for p in pols]
+    print(f"\n== correct answers by claim length; gated-* decompose only when full is NEI or < {gate:.2f} ==")
+    print(f"  {'words':6s}{'n':>5s}" + "".join(f"{c:>18s}" for c in cols))
+    for b in buckets + ["all"]:
+        xs = by[b]
+        cells = [sum(ok(n, i) for i in xs) for n in names] + [sum(gok(p, i) for i in xs) for p in pols]
+        print(f"  {b:6s}{len(xs):5d}" + "".join(f"{c:18d}" for c in cells))
+    trig = sum(gated(runs["full"][i], runs["full"][i], gate)[1] for i in ids)
+    print(f"  gate triggers decomposition on {trig}/{len(ids)} split claims")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
@@ -185,6 +222,8 @@ if __name__ == "__main__":
     ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--chunk", type=int, default=20)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--decomposer-prompt", choices=sorted(PROMPTS), default=DEFAULT_PROMPT,
+                    help="decomposer prompt version; selects its cache")
     a = ap.parse_args()
     selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
                              ids_file=a.claim_ids)
@@ -193,10 +232,11 @@ if __name__ == "__main__":
     if set(full) != {c["id"] for c in selected}:
         raise SystemExit("--full must contain every ID from the same selected evaluation set")
 
-    cache = cache_path(a.decomposer, a.n, claim_ids=a.claim_ids)
+    cache = cache_path(a.decomposer, a.n, claim_ids=a.claim_ids, prompt=a.decomposer_prompt)
     if not os.path.exists(cache):
-        raise SystemExit(f"no decomposer cache at {cache}; run python -m agent.decompose with the same --claim-ids/--n selection first")
-    decomp = Decomposer(cache=cache)
+        raise SystemExit(f"no decomposer cache at {cache}; run python -m agent.decompose --prompt "
+                         f"{a.decomposer_prompt} with the same --claim-ids/--n selection first")
+    decomp = Decomposer(cache=cache, prompt=a.decomposer_prompt)
     if any(c["claim"] not in decomp.cache for c in selected):
         raise SystemExit("cache is incomplete; rerun python -m agent.decompose with the same selection")
     claims = [c for c in selected if len(decomp(c["claim"])) > 1]
@@ -206,6 +246,7 @@ if __name__ == "__main__":
     policies = a.policies.split(",")
     suffix = (adapter_label(a.adapter) if a.adapter else "base") + (f"_{a.tag}" if a.tag else "")
     suffix += f"_{a.method}-p{K_PAGES}-k{K}"
+    suffix += "" if a.decomposer_prompt == "v1" else f"_dprompt{a.decomposer_prompt}"
     suffix += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
     paths = {p: os.path.join(TRACE_DIR, f"fever_dev_decompose-{p}-{suffix}_n{a.n}.jsonl") for p in policies}
     want = {c["id"] for c in claims}
@@ -217,7 +258,9 @@ if __name__ == "__main__":
         search = FeverSearch(method=a.method)
         verify = LocalVerify(search, a.model, a.adapter)
         base = {"controller": None, "decomposer": decomp.name, "verifier": verify.name,
-                "reward_version": reward_version(), "seed": SEED, "search_method": a.method, **manifest_metadata(a.claim_ids)}
+                "reward_version": reward_version(), "seed": SEED, "search_method": a.method,
+                "decomposer_prompt": a.decomposer_prompt,
+                **manifest_metadata(a.claim_ids)}
         for p in todo_p:
             done = set(load(paths[p]))
             todo = [c for c in claims if c["id"] not in done]
@@ -233,3 +276,4 @@ if __name__ == "__main__":
     runs = {"full": full, **{p: load(paths[p]) for p in policies}}
     ids = [c["id"] for c in claims if all(c["id"] in r for r in runs.values())]
     compare(runs, ids)
+    compare_gated_and_by_length(runs, ids)

@@ -138,6 +138,7 @@ older name, but that has not been checked.
 
 1. **The page budget does not grow with the claim.** `round_robin_pages` caps
    the union at 5 pages total, so a 3-part claim gets about 1–2 pages per part.
+   (Tested 2026-10-17: more pages per part did not help; see below.)
 2. **The live controller discards part verdicts once the full claim has been
    verified.** `final_answer()` prefers any full-claim verdict. In the v2 smoke
    test, "The Adventures of Pluto Nash stars an actor that died in 1961" (gold
@@ -155,10 +156,92 @@ older name, but that has not been checked.
 5. **Nothing decides when to decompose.** 58% of the splits are claims one
    sentence already settles.
 
+### Fixes and rerun (2026-10-17)
+
+Two fixes, both recorded in run metadata so old and new results stay comparable:
+
+- **Decomposer prompt v2** (`agent/decompose.py`, `--prompt`, default v2; the v1
+  cache keeps its filename, v2 writes `…_n900_promptv2.jsonl`). It keeps a claim
+  whole when one part identifies what another part is about, or when splitting
+  would change a negation, "only" or a count, and it bans parts that point to
+  each other. Its examples are not FEVER dev claims. It splits 173 of 900 claims
+  instead of 332: 94 of the 547 single-sentence claims (v1: 193), 10 of the 53
+  multi-sentence claims (v1: 24) and 69 of the 300 NEI claims (v1: 115). Cost:
+  357 input and 15 output tokens per claim. "Cars 3 isn't…", "Arizona is in
+  three regions", "…a band which formed in London" and "…directed by someone
+  working for potato chips" now stay whole. One "only" claim is still split
+  with "only" dropped.
+- **`final_answer` rule v2** (`agent/prompted.py`, `run.final_rule`): the
+  combined sub-claim answer wins when it is decisive and more confident than
+  the full-claim answer, so a firmer NEI is never overridden. Each final
+  answer records `source` (`claim`, `subclaims` or `abstain`). The Pluto Nash
+  case now returns REFUTED.
+
+`eval_decompose` also reports results by claim length and **gated** versions of
+each policy: keep the full-claim answer when it is decisive with confidence of
+at least 0.70, otherwise use the decompose policy. These are scored offline from
+the two traces.
+
+Rerun on the new search (`bm25-p5-k100`), SFT `5895/run1` verifier, against the
+new fixed trace. Correct answers on the split claims:
+
+| Decomposer | Split claims | full | each | pool | each-pooled | each-pooled-ctx | best gated | oracle |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| v1 | 332 | **250** | 208 | 245 | 226 | 235 | 248 (pool) | 270 |
+| v2 | 173 | **128** | 116 | 127 | 118 | 123 | 127 (pool) | 138 |
+
+`oracle` is the best policy's count of claims that `full` or that policy gets
+right: the ceiling for a controller that knew when to decompose. Tokens per
+claim (v1): full 1,480, each 3,206, pool 1,552, each-pooled 3,054.
+
+A page budget per part (N pages per search in the `pool` / `each-pooled*`
+union instead of 5 in total) was tried and removed: with 5 per part, v1 `pool`
+fell to 243 and v2 `pool` to 122, at 40–60% more tokens. The extra pages add
+competing sentences, as in the retrieval doc's candidate-page comparison.
+
+What the rerun shows:
+
+1. **No configuration beats `full`**, overall or in any length bucket, by more
+   than one claim. On the 15+ word claims the best result is 32 against 31
+   (v1 `pool`) and 23 against 22 (v2 gated `each-pooled-ctx`).
+2. **Prompt v2 roughly halves the damage per split claim.** `each` loses 12 of
+   173 claims (7%) against 42 of 332 (13%) with v1: 20 breaks against 60. It is
+   still a net loss.
+3. **Gating limits the harm but does not create a gain.** v1 gated `pool` loses
+   2 claims instead of 5. The gate fires on 185 of 332 split claims, because
+   many of them come back NEI or below 0.70.
+
+4. **Only the large losses are significant** (exact McNemar against `full`):
+   v1 `each` p < 0.001, v1 `each-pooled` p = 0.004, v2 `each` p = 0.04. `pool`
+   (v1 9 fixes / 14 breaks, v2 6 / 7) is indistinguishable from `full`.
+
+How fair the comparison is:
+
+- **Fair:** the same claims, verifier, search, page count (`pool`) and
+  evaluator; `full` is a separate run of the same deterministic verifier.
+  Decomposition gets more compute than `full` (2–3 searches, up to 2 verifies),
+  so the bias favours it, and a loss is still a loss.
+- **v1 and v2 are not on the same claims.** v2's 173 split claims are almost a
+  subset of v1's 332 (171 shared). Compare them on the whole 900, where an
+  unsplit claim keeps the `full` answer: `each` loses 42 claims with v1 and 12
+  with v2.
+- **v2 was written after reading v1's failures on these 900 dev claims.** Its
+  examples are not dev claims, but its rules are, so the v2 gain is optimistic.
+  Confirm it on the frozen calibration set before relying on it.
+- **The verifier was trained on whole FEVER claims**, not sub-claims. "Does not
+  help" holds for this verifier; a verifier trained on sub-claims could change it.
+- **The gate threshold (0.70) came from the controller prompt**, not from these
+  results, so the gated numbers are not tuned on them.
+
+On FEVER with this verifier, decomposition does not pay for itself. The fixes
+remove most of its harm, but there is no sign of upside, including on the
+longest claims. Testing "decomposition helps big claims" needs a dataset that
+has them; see below.
+
 ### How to test it properly
 
-1. Fix the pipeline first: a page budget per part, part verdicts that count in
-   `final_answer` (or log both answers), and a separate search for each part in the live loop.
+1. Fix the pipeline first. Done: `final_answer` v2 and decomposer prompt v2
+   (a per-part page budget was tried and removed). Still open: a separate evidence pool for each part in the live loop.
 2. Define "big" ahead of time (3+ parts, or 15+ words) and report by bucket
    against `full` on the same claims, verifier and search.
 3. Use a dataset with big claims: HoVer (2–4 hops over the same Wikipedia dump)
@@ -274,6 +357,10 @@ a mostly single-hop dataset. In this repo, CoT prompting helped the base 2B
 - [ ] Prompted controller v3a / v3b as in section 6.
 - [ ] Full 900-claim prompted run with the chosen prompt, against the new fixed baselines.
 - [ ] Fixed retry policies (retry on NEI, retry below 0.70) before any learned controller.
-- [ ] Decomposition: fix `final_answer` precedence and give each part its own
-      page budget; rerun `each` / `pool` by length bucket; plan a HoVer test.
+- [x] Decomposition: `final_answer` v2 and decomposer prompt v2; rerun by length
+      bucket with gated policies (section 4). No configuration beats `full`.
+- [ ] Decomposition: confirm decomposer prompt v2 on the frozen calibration set
+      (v2's rules were written from dev failures).
+- [ ] Decomposition: give each part its own evidence pool in the live prompted loop.
+- [ ] Decomposition: test on a dataset with big claims (HoVer, or AVeriTeC).
 - [ ] Report multi-hop claims (6% of dev) as a separate slice in every agent comparison.
