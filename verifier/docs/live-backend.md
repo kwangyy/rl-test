@@ -17,9 +17,9 @@ The proposal's AG-2 row (removed with `proposal.tex` in `6338188`):
 
 | Item | Status | What exists | What is missing |
 |---|---|---|---|
-| Loop skeleton over all 900 claims | **Done** | `agent/agent_loop.py`, fixed policy (search, verify, commit or abstain). Reproduces the archived verifier runs. Re-run on ranked search 2026-10-17: base 0.489, SFT `5895/run1` 0.771 accuracy ([agent loop notes §2](agent-loop-notes.md#2-fixed-policy-baselines-on-the-new-search)). Committed traces: `verifier/data/traces/fever_dev_fixed-*`, `fever_dev_decompose-*`. | The `bm25-p5-k100` traces the notes cite are not committed. |
-| Prompted agentic baseline | **Partial** | `agent/prompted.py`: an OpenRouter controller picks search / decompose / verify / commit / abstain, and the 2B verifier judges on the GPU. Prompt v2 on 30 dev claims with the SFT verifier: 0.733 accuracy, 0.667 FEVER ([notes §3](agent-loop-notes.md#3-prompted-controller-v1-and-v2-prompts)). | The full 900-claim run, the NEI rule enforced in code, prompts v3a/v3b, and a holdout check. No prompted trace is committed. |
-| Loop streams each step as an event (FastAPI) | **Done on this branch** | `agent/stream.py` and `agent/server.py`, specified in section 2. Fixed and prompted policies stream live, and saved traces replay as the same events. 13 tests in `verifier/tests/test_agent_stream.py`. | No live run against the real index and GPU yet: this container has neither (section 2.7). Multi-turn GRPO is not streamed. |
+| Loop skeleton over all 900 claims | **Done** | `agent/agent_loop.py`, fixed policy (search, verify, commit or abstain). Reproduces the archived verifier runs. Re-run on ranked search 2026-10-17: base 0.489, SFT `5895/run1` 0.771 accuracy ([agent loop notes §2](agent-loop-notes.md#2-fixed-policy-baselines-on-the-new-search)). Committed traces: `verifier/data/traces/fever_dev_fixed-*`, `fever_dev_decompose-*`. | — (the `bm25-p5-k100` traces the notes cite were committed 2026-10-24) |
+| Prompted agentic baseline | **Partial** | `agent/prompted.py`: an OpenRouter controller picks search / decompose / verify / commit / abstain, and the 2B verifier judges on the GPU. Prompt v2 on 30 dev claims with the SFT verifier: 0.733 accuracy, 0.667 FEVER ([notes §3](agent-loop-notes.md#3-prompted-controller-v1-and-v2-prompts)). | The full 900-claim run, the NEI rule enforced in code, prompts v3a/v3b, and a holdout check. Only the two 30-claim smoke traces are committed. |
+| Loop streams each step as an event (FastAPI) | **Done** | `agent/stream.py` and `agent/server.py`, specified in section 2. Fixed and prompted policies stream live, and saved traces replay as the same events. 13 tests in `verifier/tests/test_agent_stream.py`. Live smoke test on the real index, GPU and controller passed 2026-10-24 (section 2.7). | The event format is not yet agreed with AG-3. Multi-turn GRPO is not streamed. |
 | One multi-turn GRPO test | **Done (spike)** | `verifier/experiments/_shared/grpo_multiturn.py`, 16 claims, 3 steps. It runs end to end, but peak memory was 41.5 GB on a 16 GB card ([GRPO results §5](grpo-results.md#5-multi-turn-spike-2026-10-12)). Cutoff fix and smoke test done 2026-10-17: 6 of 32 rollouts still end on a tool call ([notes §5](agent-loop-notes.md#5-multi-turn-grpo-rollouts-cut-off-after-a-tool-call)). | Rerun with `--method bm25 --search-k 5` and `--num-generations 4`. |
 | Multi-turn GRPO runs 1 and 2 | **Not started** | Nothing beyond the spike and the smoke test. | Both runs, then the deliverable: multi-turn against single-turn GRPO on the same 900 claims. |
 | GRPO verifier into the demo | **Plumbing only** | The server takes any verifier through `--adapter`, including the `sft,grpo` form for a GRPO LoRA on a merged SFT model, so a single-turn GRPO adapter can be served now. | No demo frontend exists (AG-3). No GRPO run beats the 5,895-row SFT yet ([GRPO results §3](grpo-results.md#3-what-the-numbers-say)), and the CoT GRPO runs are pending. Multi-turn GRPO models call `search` themselves, so they would need their own stream function. |
@@ -37,11 +37,11 @@ event format, so the frontend draws a live run and a saved run the same way.
 ### 2.2 Run it
 
 ```
-pip install fastapi uvicorn httpx       # in requirements.txt; httpx is only for the tests
-python -m agent.server                  # base 2B verifier, http://127.0.0.1:8000
-python -m agent.server --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
-python -m agent.server --no-live        # saved traces only: no GPU, index or API key
-python -m pytest verifier/tests/test_agent_stream.py -q
+uv sync                                 # fastapi and uvicorn are dependencies; httpx and pytest are in the dev group
+uv run python -m agent.server           # base 2B verifier, http://127.0.0.1:8000
+uv run python -m agent.server --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
+uv run python -m agent.server --no-live # saved traces only: no GPU, index or API key
+uv run python -m pytest verifier/tests/test_agent_stream.py -q
 ```
 
 | Flag | Default | Meaning |
@@ -93,10 +93,11 @@ repeats the type as `event`. A stream ends after `final` or `error`.
 | `final` | `row`: the full trace row ([trace format](trace-format.md)) | Once, last |
 | `error` | `message` (`<ExceptionType>: <text>`) | The run failed and the stream ends |
 
-Every `action` is followed by the `step` with the same `t`. A `prompted` run
+Every `step` is preceded by an `action` with the same `t`, live and in replay. A `prompted` run
 stops after `commit` or `abstain`, or with `final.row.final.ended_by:
 "budget"` after `prompted.MAX_STEPS` (8) steps. A `fixed` run always has three
-steps: `search`, `verify`, then `commit` or `abstain`.
+steps: `search`, `verify`, then `commit` or `abstain`. The last action follows from the
+verifier's answer, so its `action` event arrives just before its `step`.
 
 Example (fixed policy, abbreviated):
 
@@ -143,19 +144,27 @@ Checks:
 
 ### 2.7 Tested, and not tested
 
-Tested here with no GPU, FEVER index or API key:
+Tested on 2026-10-20 with no GPU, FEVER index or API key:
 
 - The 13 tests above use fakes. They cover event order, row equality, free-text claims, the 8-step budget, replay, HTTP errors, reserved ids, an exception becoming an `error` event, and queueing.
 - The real server was run with `uvicorn` against the committed traces. `/api/traces` listed all 7 files, a replay streamed 8 events over 0.6 s at `delay=0.1`, and a live request without the index returned `status` and then `error` naming the missing `bm25_index/params.index.json`.
 
-Not yet tested:
+Live smoke test, 2026-10-24, RTX 5070 Ti, BM25 `bm25-p5-k100`, verifier `sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1`, controller `qwen/qwen3.8-flash`. Run in both the old pip `.venv` (transformers 5.17) and the `uv sync --locked` environment (transformers 5.20); both gave the same verifier output.
 
-- A live run with the real index, the 2B verifier on a GPU, or the OpenRouter controller. Try it locally on the 30-claim smoke IDs. Check that the `final` rows agree with `fever_dev_fixed-base_smoke_n30.jsonl`, apart from the search change noted in agent loop notes §2.
-- Latency per step is about 0.4–0.8 s for the fixed policy on the RTX 5070 Ti, measured on batches of 20 ([notes §2](agent-loop-notes.md#2-fixed-policy-baselines-on-the-new-search)). A single claim runs as a batch of one, so expect somewhat more.
+- **Fixed policy, dev id 19983.** The first request loads the index and verifier (about 37 s in all). The hits, evidence ids and verdict equal the row in `fever_dev_fixed-sft-…_run1_bm25-p5-k100_n900.jsonl`. Confidence is 0.859 live against 0.845 in the batch trace, a small numeric difference between a batch of one and the batched run; the reward differs only through that confidence.
+- **Warm latency, five dev claims.** Search 0.07–0.20 s, verify 0.83–0.94 s per claim.
+- **Prompted policy, dev id 19983.** Streams the controller's choices (search, verify, search, verify, commit) with the controller call on each `action`; about 14 s for 5 steps. The controller is not deterministic, so the number of steps varies between runs.
+- **Free text.** `dataset: "live"`, null `gold` and `reward`, empty `gold_evidence`.
+- **Queueing.** A second request sent during a live run received `queued`, then ran after the first finished.
+- **Errors.** 403 for a holdout id, 422 for missing or both of `id`/`claim`, an empty claim, an unknown policy or `search_k=0`, 404 for an unknown id and for a `../` trace name.
+- **Traces and replay.** `/api/traces` listed 27 files; a replay of 19983 gives the same `action`/`step` sequence as the live run.
+- **GPU memory.** About 7 GB in use with search, verifier and controller loaded.
+- **Found and fixed.** The fixed live stream sent no `action` before `commit`/`abstain`, while replay did. `stream_fixed` now sends it, and `test_fixed_stream_matches_batch_row` compares the live and replayed action sequences.
+- Transformers falls back to its slow reference kernels because `flash-linear-attention` and `causal-conv1d` are not installed. They are not in `pyproject.toml`; installing them should cut verify latency.
 
 ### 2.8 Next
 
-- [ ] Live smoke test on the GPU machine (section 2.7). Record the step latencies here.
+- [x] Live smoke test on the GPU machine (section 2.7).
 - [ ] Optional `--save` to append live rows to a `fever_live_<run>.jsonl` trace, for the failure audit.
 - [ ] Stream the multi-turn GRPO model: search calls happen during generation, so this needs a generation loop that yields at each tool call, not `stream_prompted`.
 - [ ] Agree the event format with AG-3 before the frontend is built. Change it the way the trace format changes: add fields, never rename them.

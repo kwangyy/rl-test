@@ -58,7 +58,10 @@ def stream_fixed(c, search, verify, run_info, search_k=K):
     res = verify.batch([c["claim"]], [ids])[0]
     s_verify = time.time() - t0
     row = _ungold(agent_loop.to_row(_scorable(c), hits, ids, res, run_info, s_search, s_verify, search_k), c)
-    for step in row["steps"][1:]:
+    yield {"event": "step", "step": row["steps"][1]}
+    # commit/abstain is decided by the verify result, so its action is announced just before its step
+    for step in row["steps"][2:]:
+        yield {"event": "action", "t": step["t"], "action": step["action"], "args": step["args"]}
         yield {"event": "step", "step": step}
     yield {"event": "final", "row": row}
 

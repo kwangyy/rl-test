@@ -84,10 +84,15 @@ RUN = {"policy": "fixed-bm25-p5-k3", "verifier": "fake-verifier", "reward_versio
 def test_fixed_stream_matches_batch_row(claim):
     batch = agent_loop.run_chunk([claim], FakeSearch(), FakeVerify(), RUN, search_k=3)[0]
     events = list(stream.stream_fixed(claim, FakeSearch(), FakeVerify(), RUN, search_k=3))
-    assert [e["event"] for e in events] == ["run", "action", "step", "action", "step", "step", "final"]
+    assert [e["event"] for e in events] == ["run", "action", "step", "action", "step", "action", "step", "final"]
     row = events[-1]["row"]
     assert timeless(row) == timeless(batch)
     assert [e["step"] for e in events if e["event"] == "step"] == row["steps"]
+    # same action/step sequence as a replay of the saved row
+    replay = list(stream.replay(row))
+    assert [e["event"] for e in replay] == ["run", "action", "step", "action", "step", "action", "step", "final"]
+    assert [(e["t"], e["action"], e["args"]) for e in events if e["event"] == "action"] == \
+           [(e["t"], e["action"], e["args"]) for e in replay if e["event"] == "action"]
     assert row["final"]["ended_by"] == ("commit" if claim is CLAIM else "abstain")
 
 
