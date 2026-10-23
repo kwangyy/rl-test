@@ -1,0 +1,22 @@
+{
+  "name": "fact-verifier-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot server.ts",
+    "build": "bun server.ts --build",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "bun-plugin-tailwind": "^0.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}

@@ -19,10 +19,10 @@ The proposal's AG-2 row (removed with `proposal.tex` in `6338188`):
 |---|---|---|---|
 | Loop skeleton over all 900 claims | **Done** | `agent/agent_loop.py`, fixed policy (search, verify, commit or abstain). Reproduces the archived verifier runs. Re-run on ranked search 2026-10-17: base 0.489, SFT `5895/run1` 0.771 accuracy ([agent loop notes §2](agent-loop-notes.md#2-fixed-policy-baselines-on-the-new-search)). Committed traces: `verifier/data/traces/fever_dev_fixed-*`, `fever_dev_decompose-*`. | The `bm25-p5-k100` traces the notes cite are not committed. |
 | Prompted agentic baseline | **Partial** | `agent/prompted.py`: an OpenRouter controller picks search / decompose / verify / commit / abstain, and the 2B verifier judges on the GPU. Prompt v2 on 30 dev claims with the SFT verifier: 0.733 accuracy, 0.667 FEVER ([notes §3](agent-loop-notes.md#3-prompted-controller-v1-and-v2-prompts)). | The full 900-claim run, the NEI rule enforced in code, prompts v3a/v3b, and a holdout check. No prompted trace is committed. |
-| Loop streams each step as an event (FastAPI) | **Done on this branch** | `agent/stream.py` and `agent/server.py`, specified in section 2. Fixed and prompted policies stream live, and saved traces replay as the same events. 13 tests in `verifier/tests/test_agent_stream.py`. | No live run against the real index and GPU yet: this container has neither (section 2.7). Multi-turn GRPO is not streamed. |
+| Loop streams each step as an event (FastAPI) | **Done on this branch** | `agent/stream.py` and `agent/server.py`, specified in section 2. Fixed and prompted policies stream live, and saved traces replay as the same events. 16 tests in `verifier/tests/test_agent_stream.py`, including prebuilt UI serving. | No live run against the real index and GPU yet: this container has neither (section 2.7). Multi-turn GRPO is not streamed. |
 | One multi-turn GRPO test | **Done (spike)** | `verifier/experiments/_shared/grpo_multiturn.py`, 16 claims, 3 steps. It runs end to end, but peak memory was 41.5 GB on a 16 GB card ([GRPO results §5](grpo-results.md#5-multi-turn-spike-2026-10-12)). Cutoff fix and smoke test done 2026-10-17: 6 of 32 rollouts still end on a tool call ([notes §5](agent-loop-notes.md#5-multi-turn-grpo-rollouts-cut-off-after-a-tool-call)). | Rerun with `--method bm25 --search-k 5` and `--num-generations 4`. |
 | Multi-turn GRPO runs 1 and 2 | **Not started** | Nothing beyond the spike and the smoke test. | Both runs, then the deliverable: multi-turn against single-turn GRPO on the same 900 claims. |
-| GRPO verifier into the demo | **Plumbing only** | The server takes any verifier through `--adapter`, including the `sft,grpo` form for a GRPO LoRA on a merged SFT model, so a single-turn GRPO adapter can be served now. | No demo frontend exists (AG-3). No GRPO run beats the 5,895-row SFT yet ([GRPO results §3](grpo-results.md#3-what-the-numbers-say)), and the CoT GRPO runs are pending. Multi-turn GRPO models call `search` themselves, so they would need their own stream function. |
+| GRPO verifier into the demo | **Plumbing and initial frontend** | The server takes any verifier through `--adapter`, including the `sft,grpo` form for a GRPO LoRA on a merged SFT model. `demo/` provides a React/Bun/Tailwind frontend for live steps and saved-trace replay. | Live frontend verification with a GRPO adapter remains pending. No GRPO run beats the 5,895-row SFT yet ([GRPO results §3](grpo-results.md#3-what-the-numbers-say)), and the CoT GRPO runs are pending. Multi-turn GRPO models call `search` themselves, so they would need their own stream function. |
 | Keep the GPU calendar | Not tracked in the repo | — | — |
 
 ## 2. Backend spec
@@ -34,21 +34,32 @@ the query, the hits, the verifier's verdict, and then commit or abstain. Browse
 and Compare mode read saved traces. This backend serves both through one
 event format, so the frontend draws a live run and a saved run the same way.
 
+The `demo/` frontend provides live claims, saved-trace replay, a step timeline
+and expandable evidence with final citations marked. Matched-claim comparison
+remains future work.
+
 ### 2.2 Run it
 
 ```
 pip install fastapi uvicorn httpx       # in requirements.txt; httpx is only for the tests
 python -m agent.server                  # base 2B verifier, http://127.0.0.1:8000
 python -m agent.server --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
-python -m agent.server --no-live        # saved traces only: no GPU, index or API key
+python -m agent.server --no-live        # built UI + saved traces: no Bun, GPU, index or API key
 python -m pytest verifier/tests/test_agent_stream.py -q
 ```
+
+Open <http://127.0.0.1:8000> for the committed `demo/dist/` UI; without
+`dist/index.html`, the server serves only the API. Rebuild frontend changes
+with `bun run --cwd demo build`, which produces `app.js` and `app.css` and
+removes obsolete files. See [frontend development](../../README.md#frontend-demo)
+for Bun's hot-reloading server and SSE proxy.
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--model`, `--adapter` | `Qwen/Qwen3.5-2B`, none | Verifier, as in `agent_loop.py` and `eval_verifier.py` |
 | `--method`, `--candidate-pages` | `bm25`, 5 | Search, as in `agent_loop.py` |
 | `--controller` | `qwen/qwen3.8-flash` | Big model for `policy=prompted`; needs `OPENROUTER_API_KEY` in `.env` |
+| `--max-new-tokens` | 160 | Verifier output budget; invalid replies are logged in the terminal |
 | `--host`, `--port` | `127.0.0.1`, 8000 | Bind address |
 | `--cors` | `*` | Allowed browser origins |
 | `--no-live` | off | Disable `/api/live` |
@@ -63,6 +74,7 @@ All are `GET`, so a browser `EventSource` can open the streams.
 
 | Path | Returns |
 |---|---|
+| `/` and built asset paths | Prebuilt UI from `demo/dist/`, when its `index.html` exists |
 | `/api/health` | `live`, `policies`, which backends have `loaded`, and the model, adapter, search and controller settings |
 | `/api/live?id=<FEVER dev id>&policy=fixed\|prompted&search_k=<1–100>` | SSE stream for a dev claim. The row has gold, gold evidence and reward. |
 | `/api/live?claim=<text>&policy=...` | SSE stream for free text. The row has `dataset: "live"`, `split`, `gold` and `reward` null, and `gold_evidence: []`. |
@@ -145,7 +157,14 @@ Checks:
 
 Tested here with no GPU, FEVER index or API key:
 
-- The 13 tests above use fakes. They cover event order, row equality, free-text claims, the 8-step budget, replay, HTTP errors, reserved ids, an exception becoming an `error` event, and queueing.
+- Frontend checks (2026-10-23, Bun 1.4.2): TypeScript and production builds
+  pass; saved traces stream through both the Bun proxy and FastAPI. Headless
+  browser checks cover replay controls, steps/evidence, null verdicts and a
+  390 px layout without exceptions or overflow. Repeated builds produce
+  identical assets and remove obsolete files.
+- The 16 backend tests use fakes to cover event order, row equality, free-text
+  claims, the 8-step budget, replay, HTTP errors, reserved ids, streamed errors,
+  queueing, UI assets and startup without a bundle.
 - The real server was run with `uvicorn` against the committed traces. `/api/traces` listed all 7 files, a replay streamed 8 events over 0.6 s at `delay=0.1`, and a live request without the index returned `status` and then `error` naming the missing `bm25_index/params.index.json`.
 
 Not yet tested:
@@ -158,4 +177,4 @@ Not yet tested:
 - [ ] Live smoke test on the GPU machine (section 2.7). Record the step latencies here.
 - [ ] Optional `--save` to append live rows to a `fever_live_<run>.jsonl` trace, for the failure audit.
 - [ ] Stream the multi-turn GRPO model: search calls happen during generation, so this needs a generation loop that yields at each tool call, not `stream_prompted`.
-- [ ] Agree the event format with AG-3 before the frontend is built. Change it the way the trace format changes: add fields, never rename them.
+- [ ] Confirm the event format with AG-3 as the frontend develops. Change it the way the trace format changes: add fields, never rename them.
