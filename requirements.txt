@@ -1,3 +1,4 @@
+# pyproject.toml + uv.lock are the source of truth (`uv sync`). This file is for plain pip installs.
 # torch: install the CUDA build first (RTX 50-series needs cu128 or newer):
 #   pip install torch --index-url https://download.pytorch.org/whl/cu128
 gymnasium>=0.29

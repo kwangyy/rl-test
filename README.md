@@ -34,7 +34,7 @@ The core repository workflow consists of data and retrieval index preparation, v
 
 ### 1. Data & Retrieval Index Preparation
 
-- **Python Environment**: Requires Python 3.10+ and PyTorch with CUDA/MPS/CPU support (`requirements.txt`).
+- **Python Environment**: `uv sync` builds `.venv` from `pyproject.toml` and `uv.lock` (Python 3.13, CUDA 12.8 PyTorch for the RTX 50-series and SoC GPUs; pytest and httpx in the `dev` group). The Slurm scripts activate this `.venv`. Run modules with `uv run python -m ...` or after activating it. `requirements.txt` is kept for plain pip installs; keep it in step with `pyproject.toml`.
 - **FEVER Raw Data**: Download train/dev JSONL files and Wikipedia dump (~21 GB uncompressed):
   ```bash
   mkdir -p verifier/data/fever && cd verifier/data/fever
