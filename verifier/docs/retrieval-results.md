@@ -1,5 +1,8 @@
 # Retrieval results
 
+This page preserves the historical local page/sentence retrieval baselines. For
+current follow/Exa setup, results and conclusions, see [Search expansion](retrieval-extension-results.md).
+
 ## How search works
 
 ```text
@@ -113,7 +116,7 @@ run directory**. `--claim-ids` supplies all 600 non-NEI development claims;
 
 ```bash
 for pages in 5 10 20; do
-  python -m retrieval.eval_sentence_retrieval \
+  python -m retrieval.eval_retrieval sentences \
     --claim-ids verifier/data/eval/fever-dev-900-ids.json \
     --candidate-pages "$pages" --hybrid \
     --output "retrieval/results/candidate-pages-dev/run2/p${pages}.json"
@@ -129,12 +132,12 @@ first use. **CPU is sufficient; verifier weights are not required.**
 
 ```bash
 # Page comparison: train, then frozen dev
-python -m retrieval.eval_retrieval --split train --n 1000
-python -m retrieval.eval_retrieval --claim-ids verifier/data/eval/fever-dev-900-ids.json
+python -m retrieval.eval_retrieval pages --split train --n 1000
+python -m retrieval.eval_retrieval pages --claim-ids verifier/data/eval/fever-dev-900-ids.json
 
 # Sentence BM25 vs hybrid: train, then the same frozen dev set
-python -m retrieval.eval_sentence_retrieval --split train --n 1000 --hybrid
-python -m retrieval.eval_sentence_retrieval --claim-ids verifier/data/eval/fever-dev-900-ids.json --hybrid
+python -m retrieval.eval_retrieval sentences --split train --n 1000 --hybrid
+python -m retrieval.eval_retrieval sentences --claim-ids verifier/data/eval/fever-dev-900-ids.json --hybrid
 ```
 
 - Omit `--hybrid` for BM25 only; use `--ks 3 5 10` to change tested sentence budgets.

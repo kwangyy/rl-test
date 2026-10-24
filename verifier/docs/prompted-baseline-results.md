@@ -8,7 +8,7 @@ about ±1.6 points; on the 300-claim per-label recalls about ±2.8.
 
 ## Retrieval
 
-Page recall on 1,000 non-NEI claims (`retrieval/eval_retrieval.py`). A hit
+Page recall on 1,000 non-NEI claims (`retrieval.eval_retrieval pages`). A hit
 means every page of some complete gold evidence set is in the top k.
 Title matching was tuned on train and checked once on dev.
 

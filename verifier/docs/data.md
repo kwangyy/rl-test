@@ -43,7 +43,7 @@ redistributing.
 
 ```bash
 python -m retrieval.build_bm25_index     # writes verifier/data/fever/bm25_index/ and verifier/data/fever/pages.sqlite
-python -m retrieval.eval_retrieval       # optional check: page recall@5 should match prompted-baseline-results.md
+python -m retrieval.eval_retrieval pages       # optional check: page recall@5 should match prompted-baseline-results.md
 ```
 
 The index is about 2.3 GB and `pages.sqlite` about 5.4 GB. The build runs once.
