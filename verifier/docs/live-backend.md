@@ -34,9 +34,9 @@ the query, the hits, the verifier's verdict, and then commit or abstain. Browse
 and Compare mode read saved traces. This backend serves both through one
 event format, so the frontend draws a live run and a saved run the same way.
 
-The `demo/` frontend provides live claims, saved-trace replay, a step timeline
-and expandable evidence with final citations marked. Matched-claim comparison
-remains future work.
+The `demo/` frontend provides saved-trace browsing, replay, live claims,
+a step timeline and expandable evidence with final citations marked. Browse loads complete traces on demand; Replay streams their recorded
+steps. Matched-claim comparison remains future work.
 
 ### 2.2 Run it
 

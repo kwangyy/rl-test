@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { type Claim, type Health, type Trace } from "../app"
+import { type Claim, type Health, type Mode, type Trace } from "../app"
 
-const fieldClass =
-    "w-full rounded-lg border bg-background px-3.5 py-2.5 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
+export const fieldClass =
+    "w-full rounded-lg resize-none leading-relaxed border bg-background px-3.5 py-2.5 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
 
 type Props = {
     health: Health | null; traces: Trace[]; claims: Claim[];
     trace: string; setTrace: (v: string) => void;
     claimId: string; setClaimId: (v: string) => void;
-    mode: "replay" | "live"; setMode: (v: "replay" | "live") => void;
+    mode: Mode; setMode: (v: Mode) => void;
     input: string; setInput: (v: string) => void;
     policy: string; setPolicy: (v: string) => void;
     busy: boolean; canRun: boolean; onStart: () => void;
@@ -16,7 +16,7 @@ type Props = {
 
 type Option = { value: string; label: string };
 
-function Select({
+export function Select({
     value,
     onChange,
     options,
@@ -49,7 +49,7 @@ function Select({
                 type="button"
                 disabled={disabled}
                 onClick={() => setOpen((o) => !o)}
-                className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border bg-background px-3.5 py-2.5 text-left text-sm shadow-sm transition hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-lg border bg-background px-3.5 py-2.5 text-left text-sm shadow-sm transition hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <span className={`truncate ${selected ? "" : "text-muted-foreground"}`}>
                     {selected?.label ?? placeholder}
@@ -91,27 +91,26 @@ function Select({
 export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, setClaimId, mode, setMode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
     return (
         <form
-            className="space-y-4 rounded-xl p-6 shadow-sm border lg:sticky lg:top-8"
+            className="min-w-0 space-y-4 rounded-xl p-6 shadow-sm border lg:sticky lg:top-8"
             onSubmit={(e) => { e.preventDefault(); onStart(); }}
         >
-            <h2 className="text-lg font-semibold">Check a claim</h2>
-
-            <div className="grid grid-cols-2 p-1 gap-1 bg-secondary rounded-lg">
-                {(["replay", "live"] as const).map((m) => (
+            <h2 className="text-sm font-medium">Mode</h2>
+            <div className="-mt-2 grid grid-cols-3 p-1 gap-1 bg-secondary rounded-lg">
+                {(["browse", "replay", "live"] as const).map((m) => (
                     <button
                         key={m}
                         type="button"
                         disabled={busy || (m === "live" && !health?.live)}
                         aria-pressed={mode === m}
                         onClick={() => setMode(m)}
-                        className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize bg-background transition cursor-pointer disabled:cursor-not-allowed ${mode === m ? "shadow-sm" : "bg-transparent text-foreground/60 hover:text-foreground"}`}
+                        className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition cursor-pointer disabled:cursor-not-allowed ${mode === m ? "bg-background shadow-sm" : "text-foreground/60 hover:text-foreground"}`}
                     >
                         {m}
                     </button>
                 ))}
             </div>
 
-            {mode === "replay" ? (
+            {mode !== "live" ? (
                 <>
                     <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
                         Experiment
@@ -126,7 +125,7 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
                             }))}
                         />
                     </div>
-                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                    {mode === "replay" && <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
                         Claim
                         <Select
                             value={claimId}
@@ -135,14 +134,14 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
                             placeholder="Select an experiment"
                             options={claims.map((c) => ({ value: String(c.id), label: c.claim }))}
                         />
-                    </div>
+                    </div>}
                 </>
             ) : (
                 <>
                     <label className="flex flex-col gap-2 text-sm font-medium">
                         Claim
                         <textarea
-                            className={`${fieldClass} resize-none leading-relaxed`}
+                            className={fieldClass}
                             rows={4}
                             value={input}
                             disabled={busy}
@@ -165,12 +164,12 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
                 </>
             )}
 
-            <button
+            {mode !== "browse" && <button
                 className="w-full px-5 py-3 cursor-pointer rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!canRun}
             >
                 {busy ? "Running…" : mode === "replay" ? "Replay" : "Verify"}
-            </button>
+            </button>}
         </form>
     );
 }
