@@ -351,9 +351,16 @@ a mostly single-hop dataset. In this repo, CoT prompting helped the base 2B
 - [ ] Multi-turn GRPO: rerun the smoke test with `--method bm25 --search-k 5`
       and `--num-generations 4` (new `--config-name` / `--run-name`) to check
       memory, remaining cutoffs, and whether training reduces `n_refused`.
-- [ ] Prompted controller: enforce the NEI rule in code (final answer is NEI
-      unless a later verdict has higher confidence than the earlier NEI), as
-      prompt v3 or a policy flag; compare with v2 on the same 30 claims.
+- [x] Prompted controller: enforce the NEI rule in code (final answer is NEI
+      unless a later verdict has higher confidence than the earlier NEI).
+      Done 2026-10-24 as `final_answer` rule v3 (`run.final_rule: "v3"`,
+      `final.source: "nei_rule"`); the controller prompt is unchanged (v2).
+      The rule changes only the final answer, so replaying the committed
+      30-claim smoke traces is exact. v1-prompt trace: 2 fixed (Amancio Ortega,
+      Trick-or-Treating), 0 broken, 0.633 to 0.700. v2-prompt trace: 1 fixed
+      (Amancio Ortega), 1 broken (The Mighty Ducks, REFUTED at 0.52 after NEI at
+      0.64, which was right by luck), 0.733 either way. Too few claims to judge;
+      the 900-claim run decides.
 - [ ] Prompted controller v3a / v3b as in section 6.
 - [ ] Full 900-claim prompted run with the chosen prompt, against the new fixed baselines.
 - [ ] Fixed retry policies (retry on NEI, retry below 0.70) before any learned controller.

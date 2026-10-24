@@ -119,7 +119,10 @@ rows (the fixed policy) stay valid; every field below is an addition.
   Rows with `run.final_rule: "v2"` (2026-10-17) use the combined sub-claim
   answer when it is decisive and more confident, and record `final.source`
   (`claim`, `subclaims` or `abstain`). `run.decomposer_prompt` records the
-  decomposer prompt version.
+  decomposer prompt version. Rows with `run.final_rule: "v3"` (2026-10-24)
+  also keep a decisive answer only when it is more confident than every
+  NOT_ENOUGH_INFO verdict on the full claim; otherwise `final` is that NEI with
+  `source: "nei_rule"`.
 
 ## Schema 3 (2026-10-16): explicit frozen evaluation selection
 

@@ -232,7 +232,14 @@ def combine(sub_verdicts, n):
     return {"verdict": NEI, "evidence": [], "confidence": max(nei) if nei else None}
 
 
-FINAL_RULE = "v2"  # v1: any full-claim verdict beat the sub-claims; v2: see final_answer
+FINAL_RULE = "v3"  # v1: any full-claim verdict beat the sub-claims; v2, v3: see final_answer
+
+
+def firmest_nei(ep):
+    """The most confident NOT_ENOUGH_INFO verdict from any verify of the full claim, or None."""
+    neis = [s["result"] for s in ep.steps if s["action"] == "verify"
+            and s["args"].get("subclaim") is None and s["result"].get("verdict") == NEI]
+    return max(neis, key=lambda r: r["confidence"] or 0) if neis else None
 
 
 def final_answer(ep):
@@ -243,7 +250,21 @@ def final_answer(ep):
     (SUPPORTED/REFUTED) and more confident than the full-claim answer, so it never
     overrides a firmer NEI (as the v2 controller prompt asks). v1 always took the full-claim verdict, which threw
     away a correct REFUTED from the sub-claims (docs/agent-loop-notes.md section 4). `source`
-    records which side answered."""
+    records which side answered.
+
+    v3 enforces the prompt's NEI rule across repeated verifies of the full claim: a
+    decisive answer stands only if it is more confident than every NEI the verifier gave
+    the claim; otherwise the answer is that NEI, with `source` "nei_rule". v2 left this to
+    the controller, which committed REFUTED at 0.52 after an NEI at 0.64 (notes section 3)."""
+    ans = _answer(ep)
+    nei = firmest_nei(ep) if FINAL_RULE == "v3" and ep.end != "abstain" else None
+    if nei and ans["verdict"] not in (None, NEI) and (ans["confidence"] or 0) <= (nei["confidence"] or 0):
+        return {"verdict": NEI, "evidence": [], "confidence": nei["confidence"], "source": "nei_rule"}
+    return ans
+
+
+def _answer(ep):
+    """final_answer under rule v2."""
     v = ep.claim_verdict
     if ep.end == "abstain":
         conf = v["token_prob"].get(NEI) if v and v.get("token_prob") else None
