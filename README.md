@@ -35,7 +35,7 @@ The `demo/` directory contains the React app. The prebuilt `demo/dist/` is inclu
 python -m agent.server --no-live
 ```
 
-FastAPI serves the built UI and `/api/*` together; there is no Bun process or separate proxy to run. Replay uses committed traces, so it needs no GPU, index or API key. Start the Python server without `--no-live` to enable live claims; see [backend setup and requirements](verifier/docs/live-backend.md#22-run-it).
+FastAPI serves the built UI and `/api/*` together; there is no Bun process or separate proxy to run. Browse lists saved claims in a searchable table with outcome filters; open a claim to inspect its full trace. Replay plays the recorded steps in order. Both use committed traces, so they need no GPU, index or API key. Start the Python server without `--no-live` to enable live claims; see [backend setup and requirements](verifier/docs/live-backend.md#22-run-it).
 
 The live verifier allows 160 output tokens; override with `--max-new-tokens`. Invalid replies are logged in the server terminal.
 
