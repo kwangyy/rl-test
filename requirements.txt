@@ -19,3 +19,4 @@ fastapi
 uvicorn
 httpx
 pytest
+exa-py==2.26.0
