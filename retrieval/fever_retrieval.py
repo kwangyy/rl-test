@@ -15,13 +15,14 @@ import math
 import os
 import re
 import sqlite3
+from urllib.parse import unquote, urlsplit
 
 import bm25s
 import Stemmer
 from bm25s.tokenization import Tokenizer
 
 from core.interfaces import Hit
-from retrieval.build_bm25_index import DATA, unescape
+from retrieval.build_bm25_index import DATA, PTB, unescape
 
 MAX_TITLE_WORDS = 8
 PAREN = re.compile(r"^(.*) \([^()]*\)$")
@@ -71,6 +72,39 @@ class FeverRetriever:
             self.doc_ids = json.load(f)
         self.db = sqlite3.connect(os.path.join(data_dir, "pages.sqlite"), check_same_thread=False)
 
+    def resolve_page(self, target):
+        """Map an article URL or link target to an existing snapshot page only."""
+        if '://' in target:
+            parts = urlsplit(target)
+            if (parts.scheme not in ('https', 'http') or parts.hostname != 'en.wikipedia.org'
+                    or not parts.path.startswith('/wiki/') or parts.username or parts.password):
+                return None
+            target = unquote(parts.path[len('/wiki/'):])
+        else:
+            target = target.split('#', 1)[0]
+        if not target.strip():
+            return None
+        encoded = target.replace(' ', '_')
+        for token, char in PTB.items():
+            encoded = encoded.replace(char, token)
+        # Wikipedia capitalizes the first title character, not every word.
+        # Prefer that exact identity before case-folding can collide with a
+        # different page such as Capital_City versus Capital_city.
+        capitalized = encoded[:1].upper() + encoded[1:]
+        for candidate in dict.fromkeys((target, target.replace(' ', '_'), encoded, capitalized)):
+            if self.db.execute('SELECT 1 FROM pages WHERE id=?', (candidate,)).fetchone():
+                return candidate
+        if not hasattr(self, 'exact'):
+            self._build_title_index()
+        index = self.exact.get(_norm(target))
+        return self.doc_ids[index] if index is not None else None
+
+    def rank_sentences(self, query, hits, k):
+        if k < 1 or not query.strip():
+            raise ValueError('nonempty query and positive sentence budget required')
+        ranker = self._rank_hybrid if self.method == 'hybrid' else self._rank_bm25
+        return ranker(query, _unique_hits(hits))[:k]
+
     def search(self, queries: list[str], k: int) -> list[list[Hit]]:
         """Retrieve up to k evidence sentences per query, preserving query order.
 
@@ -98,13 +132,9 @@ class FeverRetriever:
         pages_per_query = self.search_with_titles([queries[i] for i in active], k=self.candidate_pages)
         # 2. Candidate sentences: all numbered lines from the selected pages.
         for i, pages in zip(active, pages_per_query):
-            hits = self._collect_sentences(pages)
-            # 3. Rank the combined pool, then apply the evidence budget once.
-            if self.method == "hybrid":
-                hits = self._rank_hybrid(queries[i], hits)
-            elif self.method == "bm25":
-                hits = self._rank_bm25(queries[i], hits)
-            out[i] = hits[:k]
+            hits = self.collect_sentences(pages)
+            # Use the same sentence-selection implementation as expansion tools.
+            out[i] = self.rank_sentences(queries[i], hits, k)
         return out
 
     def search_pages(self, queries, k=5):
@@ -178,20 +208,26 @@ class FeverRetriever:
             out.append([self.doc_ids[i] for i in picked])
         return out
 
+    def raw_lines(self, page_id):
+        """Read stored FEVER text and anchor fields verbatim, or empty if absent.
+
+        Both sentence decoding and follow's hyperlink parser use this corpus API;
+        neither consumer needs to duplicate the database query.
+        """
+        row = self.db.execute("SELECT lines FROM pages WHERE id = ?", (page_id,)).fetchone()
+        return row[0] if row is not None else ""
+
     def sentences(self, page_id):
         """Numbered sentences of a page, PTB escapes undone. Line numbers are
         FEVER's, so (page_id, line) matches gold evidence directly."""
-        row = self.db.execute("SELECT lines FROM pages WHERE id = ?", (page_id,)).fetchone()
-        if row is None:
-            return []
         out = []
-        for line in row[0].split("\n"):
+        for line in self.raw_lines(page_id).split("\n"):
             fields = line.split("\t")
             if len(fields) >= 2 and fields[0].isdigit() and fields[1].strip():
                 out.append((int(fields[0]), unescape(fields[1])))
         return out
 
-    def _collect_sentences(self, pages):
+    def collect_sentences(self, pages):
         """Load numbered lines from selected pages; scores are assigned by ranking."""
         return _unique_hits([
             {"page": page, "line": line, "text": text, "score": 0.0}

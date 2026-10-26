@@ -1,5 +1,18 @@
 # Cascade payoff: 2B first, big model on hand-off (2026-10-26)
 
+> **Correction (2026-10-26, same day).** The thresholds, margins and learned
+> router below were fitted on the eval-v1 **calibration** set. The data policy
+> forbids that ([data.md §6](data.md#6-frozen-development-calibration-and-holdout-sets):
+> "never use calibration or holdout for ... prompt/policy tuning"). The
+> fixed-rule rows (2B alone, flash alone, "route SUPPORTED/REFUTED", "route
+> NEI") fit nothing, so they stand. The fitted rows were rerun with policies
+> fitted on 1,500 unused FEVER **train** claims, and the conclusion holds. A
+> confidence threshold reaches 0.672–0.673 FEVER score on dev, against 0.666
+> for the fixed loop. See
+> [controller-offline-rl.md](controller-offline-rl.md). The calibration
+> prediction files remain as evaluation records; no further policy is fitted
+> on them.
+
 AG-2. Question: if the 2B answers first and hands some claims to the big
 model, how much accuracy does that buy per hand-off, and does a learned router
 beat simple rules? This measures the headroom for a controller before any
