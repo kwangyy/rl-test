@@ -323,7 +323,7 @@ class OpenRouterModel:
     def __init__(self, name=BIG_MODEL, system_prompt=SYSTEM, max_new_tokens=160):
         from dotenv import load_dotenv
         from openai import OpenAI
-        load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+        load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
         self.client = OpenAI(base_url="https://openrouter.ai/api/v1",
                              api_key=os.environ["OPENROUTER_API_KEY"], max_retries=3)
         self.name = name
