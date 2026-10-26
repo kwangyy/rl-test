@@ -1,0 +1,178 @@
+{
+  "n_cal": 900,
+  "n": 900,
+  "metrics": {
+    "correct": {
+      "small": {
+        "score": 0.7611111111111111,
+        "routed": 0.0,
+        "cost_usd": 0
+      },
+      "big": {
+        "score": 0.7144444444444444,
+        "routed": 1.0,
+        "cost_usd": 0.19614975999999998
+      },
+      "oracle": {
+        "score": 0.8644444444444445,
+        "routed": 0.10333333333333333,
+        "cost_usd": 0.019813
+      },
+      "route_small_nei": {
+        "score": 0.7088888888888889,
+        "routed": 0.36444444444444446,
+        "cost_usd": 0.06904681
+      },
+      "route_small_non_nei": {
+        "score": 0.7666666666666667,
+        "routed": 0.6355555555555555,
+        "cost_usd": 0.12710295
+      },
+      "learned": {
+        "margin": -0.1452,
+        "score": 0.7577777777777778,
+        "routed": 0.7355555555555555,
+        "cost_usd": 0.14904713
+      },
+      "fractions": [
+        {
+          "target": 0.1,
+          "threshold": 0.5836014872271433,
+          "score": 0.77,
+          "routed": 0.15333333333333332,
+          "cost_usd": 0.03191522
+        },
+        {
+          "target": 0.2,
+          "threshold": 0.6727568992963057,
+          "score": 0.7666666666666667,
+          "routed": 0.29,
+          "cost_usd": 0.06165752
+        },
+        {
+          "target": 0.3,
+          "threshold": 0.7355325116608205,
+          "score": 0.7588888888888888,
+          "routed": 0.3788888888888889,
+          "cost_usd": 0.07872964
+        },
+        {
+          "target": 0.4,
+          "threshold": 0.7948016652880519,
+          "score": 0.75,
+          "routed": 0.46444444444444444,
+          "cost_usd": 0.09528592
+        },
+        {
+          "target": 0.5,
+          "threshold": 0.8429085957660116,
+          "score": 0.7377777777777778,
+          "routed": 0.5466666666666666,
+          "cost_usd": 0.11074086999999999
+        },
+        {
+          "target": 0.6,
+          "threshold": 0.8854699989704369,
+          "score": 0.7311111111111112,
+          "routed": 0.6377777777777778,
+          "cost_usd": 0.12729901
+        }
+      ],
+      "cal_best": {
+        "threshold": 0.6667356500216529,
+        "score": 0.7633333333333333,
+        "routed": 0.27444444444444444,
+        "cost_usd": 0.058174779999999995
+      }
+    },
+    "fever_score": {
+      "small": {
+        "score": 0.6711111111111111,
+        "routed": 0.0,
+        "cost_usd": 0
+      },
+      "big": {
+        "score": 0.6344444444444445,
+        "routed": 1.0,
+        "cost_usd": 0.19614975999999998
+      },
+      "oracle": {
+        "score": 0.7788888888888889,
+        "routed": 0.10777777777777778,
+        "cost_usd": 0.02143917
+      },
+      "route_small_nei": {
+        "score": 0.5988888888888889,
+        "routed": 0.36444444444444446,
+        "cost_usd": 0.06904681
+      },
+      "route_small_non_nei": {
+        "score": 0.7066666666666667,
+        "routed": 0.6355555555555555,
+        "cost_usd": 0.12710295
+      },
+      "learned": {
+        "margin": -0.2063,
+        "score": 0.7022222222222222,
+        "routed": 0.6588888888888889,
+        "cost_usd": 0.13271732
+      },
+      "fractions": [
+        {
+          "target": 0.1,
+          "threshold": 0.5836014872271433,
+          "score": 0.6833333333333333,
+          "routed": 0.15333333333333332,
+          "cost_usd": 0.03191522
+        },
+        {
+          "target": 0.2,
+          "threshold": 0.6727568992963057,
+          "score": 0.67,
+          "routed": 0.29,
+          "cost_usd": 0.06165752
+        },
+        {
+          "target": 0.3,
+          "threshold": 0.7355325116608205,
+          "score": 0.6622222222222223,
+          "routed": 0.3788888888888889,
+          "cost_usd": 0.07872964
+        },
+        {
+          "target": 0.4,
+          "threshold": 0.7948016652880519,
+          "score": 0.6544444444444445,
+          "routed": 0.46444444444444444,
+          "cost_usd": 0.09528592
+        },
+        {
+          "target": 0.5,
+          "threshold": 0.8429085957660116,
+          "score": 0.6477777777777778,
+          "routed": 0.5466666666666666,
+          "cost_usd": 0.11074086999999999
+        },
+        {
+          "target": 0.6,
+          "threshold": 0.8854699989704369,
+          "score": 0.6433333333333333,
+          "routed": 0.6377777777777778,
+          "cost_usd": 0.12729901
+        }
+      ],
+      "cal_best": {
+        "threshold": 0.5229034361123728,
+        "score": 0.67,
+        "routed": 0.08888888888888889,
+        "cost_usd": 0.01946333
+      }
+    }
+  },
+  "inputs": {
+    "small_cal": "verifier/evaluation/results/sft-direct-cap160/cascade-cal900/predictions.jsonl",
+    "big_cal": "verifier/evaluation/results/big-direct-cap160/cascade-cal900/predictions.jsonl",
+    "small": "verifier/evaluation/results/sft-direct-cap160/cascade-dev900/predictions.jsonl",
+    "big": "verifier/evaluation/results/big-direct-cap160/cascade-dev900/predictions.jsonl"
+  }
+}

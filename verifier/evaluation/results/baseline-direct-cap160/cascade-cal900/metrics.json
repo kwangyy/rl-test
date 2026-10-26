@@ -1,0 +1,261 @@
+{
+  "verifier/evaluation/results/baseline-direct-cap160/cascade-cal900/predictions.jsonl": {
+    "model": "Qwen/Qwen3.5-2B",
+    "retrieval": "titles",
+    "prompt_style": "direct",
+    "all": {
+      "n": 900,
+      "accuracy": 0.4711111111111111,
+      "format_rate": 0.8711111111111111,
+      "fever_score": 0.3611111111111111,
+      "evidence_f1_non_nei": 0.44272041042693216,
+      "recall": {
+        "SUPPORTED": 0.9533333333333334,
+        "REFUTED": 0.2866666666666667,
+        "NOT_ENOUGH_INFO": 0.17333333333333334
+      },
+      "harm_weighted_error": 0.8086111111111111,
+      "nei_precision": 0.65,
+      "calibration": {
+        "stated_conf": {
+          "n": 868,
+          "coverage": 0.9644444444444444,
+          "brier": 0.5354983870967742,
+          "ece": 0.5339170506912442,
+          "risk_at_coverage": {
+            "0.5": {
+              "coverage": 0.8555555555555555,
+              "risk": 0.5298701298701298,
+              "threshold": 1
+            },
+            "0.8": {
+              "coverage": 0.8555555555555555,
+              "risk": 0.5298701298701298,
+              "threshold": 1
+            },
+            "1.0": {
+              "coverage": 0.9644444444444444,
+              "risk": 0.511520737327189,
+              "threshold": 0.0
+            }
+          }
+        },
+        "token_conf": {
+          "n": 868,
+          "coverage": 0.9644444444444444,
+          "brier": 0.33432764085036154,
+          "ece": 0.3046543764912628,
+          "risk_at_coverage": {
+            "0.5": {
+              "coverage": 0.4822222222222222,
+              "risk": 0.3870967741935484,
+              "threshold": 0.8551183249192977
+            },
+            "0.8": {
+              "coverage": 0.7722222222222223,
+              "risk": 0.4848920863309353,
+              "threshold": 0.5785408328967812
+            },
+            "1.0": {
+              "coverage": 0.9644444444444444,
+              "risk": 0.511520737327189,
+              "threshold": 0.3315996431073788
+            }
+          }
+        }
+      }
+    },
+    "strata": {
+      "gold_in_context": {
+        "n": 507,
+        "accuracy": 0.6272189349112426,
+        "format_rate": 0.863905325443787,
+        "fever_score": 0.5384615384615384,
+        "evidence_f1_non_nei": 0.5017332999066985,
+        "recall": {
+          "SUPPORTED": 0.9607843137254902,
+          "REFUTED": 0.2896825396825397,
+          "NOT_ENOUGH_INFO": null
+        },
+        "harm_weighted_error": 0.5216962524654832,
+        "nei_precision": 0.0,
+        "calibration": {
+          "stated_conf": {
+            "n": 491,
+            "coverage": 0.9684418145956607,
+            "brier": 0.3163545824847251,
+            "ece": 0.31708757637474544,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.9151873767258383,
+                "risk": 0.32974137931034486,
+                "threshold": 1
+              },
+              "0.8": {
+                "coverage": 0.9151873767258383,
+                "risk": 0.32974137931034486,
+                "threshold": 1
+              },
+              "1.0": {
+                "coverage": 0.9684418145956607,
+                "risk": 0.3523421588594705,
+                "threshold": 0.0
+              }
+            }
+          },
+          "token_conf": {
+            "n": 491,
+            "coverage": 0.9684418145956607,
+            "brier": 0.20677735599081304,
+            "ece": 0.16776020087469065,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.48520710059171596,
+                "risk": 0.11382113821138207,
+                "threshold": 0.883883857416404
+              },
+              "0.8": {
+                "coverage": 0.7751479289940828,
+                "risk": 0.2798982188295165,
+                "threshold": 0.6150587231821552
+              },
+              "1.0": {
+                "coverage": 0.9684418145956607,
+                "risk": 0.3523421588594705,
+                "threshold": 0.3315996431073788
+              }
+            }
+          }
+        }
+      },
+      "gold_not_in_context": {
+        "n": 93,
+        "accuracy": 0.5806451612903226,
+        "format_rate": 0.8602150537634409,
+        "fever_score": 0.0,
+        "evidence_f1_non_nei": 0.12100498068240004,
+        "recall": {
+          "SUPPORTED": 0.9111111111111111,
+          "REFUTED": 0.2708333333333333,
+          "NOT_ENOUGH_INFO": null
+        },
+        "harm_weighted_error": 0.5483870967741935,
+        "nei_precision": 0.0,
+        "calibration": {
+          "stated_conf": {
+            "n": 88,
+            "coverage": 0.946236559139785,
+            "brier": 0.27454545454545454,
+            "ece": 0.2761363636363636,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.7956989247311828,
+                "risk": 0.31081081081081086,
+                "threshold": 1
+              },
+              "0.8": {
+                "coverage": 0.7956989247311828,
+                "risk": 0.31081081081081086,
+                "threshold": 1
+              },
+              "1.0": {
+                "coverage": 0.946236559139785,
+                "risk": 0.38636363636363635,
+                "threshold": 0.0
+              }
+            }
+          },
+          "token_conf": {
+            "n": 88,
+            "coverage": 0.946236559139785,
+            "brier": 0.24661523173780078,
+            "ece": 0.2307876533017298,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.4731182795698925,
+                "risk": 0.20454545454545459,
+                "threshold": 0.8032260029928295
+              },
+              "0.8": {
+                "coverage": 0.7634408602150538,
+                "risk": 0.3943661971830986,
+                "threshold": 0.5584131266819075
+              },
+              "1.0": {
+                "coverage": 0.946236559139785,
+                "risk": 0.38636363636363635,
+                "threshold": 0.387014217387395
+              }
+            }
+          }
+        }
+      },
+      "gold_nei": {
+        "n": 300,
+        "accuracy": 0.17333333333333334,
+        "format_rate": 0.8866666666666667,
+        "fever_score": 0.17333333333333334,
+        "evidence_f1_non_nei": null,
+        "recall": {
+          "SUPPORTED": null,
+          "REFUTED": null,
+          "NOT_ENOUGH_INFO": 0.17333333333333334
+        },
+        "harm_weighted_error": 1.3741666666666668,
+        "nei_precision": 1.0,
+        "calibration": {
+          "stated_conf": {
+            "n": 289,
+            "coverage": 0.9633333333333334,
+            "brier": 0.9872750865051902,
+            "ece": 0.9918685121107267,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.7733333333333333,
+                "risk": 1.0,
+                "threshold": 1
+              },
+              "0.8": {
+                "coverage": 0.7733333333333333,
+                "risk": 1.0,
+                "threshold": 1
+              },
+              "1.0": {
+                "coverage": 0.9633333333333334,
+                "risk": 0.8200692041522492,
+                "threshold": 0.0
+              }
+            }
+          },
+          "token_conf": {
+            "n": 289,
+            "coverage": 0.9633333333333334,
+            "brier": 0.5777389967948032,
+            "ece": 0.5845104747067525,
+            "risk_at_coverage": {
+              "0.5": {
+                "coverage": 0.48333333333333334,
+                "risk": 0.9310344827586207,
+                "threshold": 0.804595912572792
+              },
+              "0.8": {
+                "coverage": 0.7733333333333333,
+                "risk": 0.8706896551724138,
+                "threshold": 0.5542693429754205
+              },
+              "1.0": {
+                "coverage": 0.9633333333333334,
+                "risk": 0.8200692041522492,
+                "threshold": 0.37958266183655354
+              }
+            }
+          }
+        }
+      }
+    },
+    "mean_tokens_in": 1354.0388888888888,
+    "mean_tokens_out": 49.85111111111111,
+    "reasoning_present_rate": null,
+    "reasoning_valid_citations_rate": null
+  }
+}
