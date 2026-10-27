@@ -20,6 +20,7 @@ This repository studies evidence-grounded claim verification on FEVER. A verifie
 | [`agent/train.sbatch`](agent/train.sbatch) | Controller rollout, SFT data, scorer SFT, and RL entry point; choose `PHASE=rollouts`, `sft_data`, `sft`, or `rl` |
 | [`agent/requirements.txt`](agent/requirements.txt) | Optional RSI-Jev controller dependency |
 | [`agent/train/`](agent/train/) | Citation controller SFT labels, scorer training, RL training, and reward design |
+| [`agent/docs/controller-workflow-and-results.md`](agent/docs/controller-workflow-and-results.md) | English bullet-point summary of the controller workflow, results, and conclusion |
 | [`verifier/TODO.md`](verifier/TODO.md) | Current priorities and experiment checklist |
 | [`verifier/docs/`](verifier/docs/) | Data guide, experiment results, architecture and background |
 | [`verifier/data/train/`](verifier/data/train/) | Committed SFT and GRPO training examples |
