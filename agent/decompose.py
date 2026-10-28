@@ -85,16 +85,49 @@ class BigModel:
         self.client = OpenAI(base_url="https://openrouter.ai/api/v1",
                              api_key=os.environ["OPENROUTER_API_KEY"], max_retries=3)
         self.name = name
-        self.max_tokens = max_tokens
+        # Claude sometimes reasons in text before its JSON; 200 tokens cut that off (smoke run)
+        self.max_tokens = max(max_tokens, 1000) if name.startswith("anthropic/") else max_tokens
 
     def __call__(self, system, user):
+        # Claude 5.x on OpenRouter cannot disable reasoning and takes no temperature;
+        # "minimal" effort is the closest to off (0 reasoning tokens on a test call).
+        claude = self.name.startswith("anthropic/")
         r = self.client.chat.completions.create(
-            model=self.name, temperature=0, seed=SEED, max_tokens=self.max_tokens,
+            model=self.name, max_tokens=self.max_tokens,
+            **({} if claude else {"temperature": 0, "seed": SEED}),
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            extra_body={"reasoning": {"enabled": False}},
+            extra_body={"reasoning": {"effort": "minimal"} if claude else {"enabled": False}},
         )
         return {"text": r.choices[0].message.content or "",
                 "in_tokens": r.usage.prompt_tokens, "out_tokens": r.usage.completion_tokens}
+
+
+class ClaudeModel:
+    """BigModel's interface on the Anthropic API (ANTHROPIC_API_KEY in .env), for claude-* names.
+
+    Thinking is off ("between_tools"), like BigModel's reasoning: enabled False. Claude 5.x
+    models take no temperature or seed, so repeated calls are not guaranteed identical."""
+
+    def __init__(self, name, max_tokens=200):
+        import anthropic
+        load_env()
+        self.client = anthropic.Anthropic(max_retries=8)
+        self.name = name
+        self.max_tokens = max_tokens
+
+    def __call__(self, system, user):
+        r = self.client.messages.create(
+            model=self.name, max_tokens=self.max_tokens, system=system,
+            thinking={"type": "between_tools"},
+            messages=[{"role": "user", "content": user}],
+        )
+        return {"text": "".join(b.text for b in r.content if b.type == "text"),
+                "in_tokens": r.usage.input_tokens, "out_tokens": r.usage.output_tokens}
+
+
+def big_model(name=BIG_MODEL, max_tokens=200):
+    """ClaudeModel for claude-* names, otherwise BigModel on OpenRouter."""
+    return (ClaudeModel if name.startswith("claude-") else BigModel)(name, max_tokens)
 
 
 def first_json(text, kind):
@@ -137,7 +170,7 @@ class Decomposer:
         if claim in self.cache:
             return {**self.cache[claim], "cached": True}
         if self.big is None:
-            self.big = BigModel(self.name)
+            self.big = big_model(self.name)
         g = self.big(self.system, f"Claim: {claim}")
         subs = [s.strip() for s in (first_json(g["text"], list) or []) if isinstance(s, str) and s.strip()]
         subs = list(dict.fromkeys(subs))

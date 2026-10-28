@@ -10,13 +10,31 @@ its searches found and what the verifier said, and picks one action:
     commit    {}                      answer with the latest verdict on the claim
     abstain   {}                      answer NOT_ENOUGH_INFO
 
+`--tools` changes the action set; the prompt rules are otherwise v2 and the trace
+name gains the mode as a tag:
+    full      the actions above (default)
+    nosearch  the claim is searched once up front, as in the fixed loop; the controller
+              can then only decompose, verify, commit or abstain
+    follow    full plus follow {"link": "L<n>"}: open a page linked from a retrieved or
+              cited sentence and put its sentences first in the verifier's input
+    pages     follow plus open_page {"title": str} and find_pages {"query": str}
+    web       pages plus web_pages {"query": str}: Exa search of en.wikipedia.org mapped to
+              the FEVER snapshot; replays --exa-cache, live requests need --exa-network
+The retrieval tools are in agent/tools.py.
+
 Claims in a chunk run in lockstep so searches and verifies are batched on the
 GPU while controller calls run in parallel threads.
 
     python -m agent.prompted --n 30 --tag smoke
     python -m agent.prompted --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
+    python -m agent.prompted --tools follow --adapter ...
+    python -m agent.prompted --tools web --exa-network --exa-max-requests 100 --adapter ...
+    python -m agent.prompted --tools follow --train-n 6000 --shard 0/3 --chunk 64 --workers 32 --adapter ...
 
-Writes verifier/data/traces/fever_dev_prompted-<verifier>_n<N>.jsonl in
+--train-n samples unused train claims as agent/action_cache.py does (no SFT/GRPO or
+reserved IDs) for controller imitation data; --shard splits one set across processes.
+
+Writes verifier/data/traces/fever_<split>_prompted-<verifier>_n<N>.jsonl in
 docs/trace-format.md, schema 2: schema 1 plus the controller's own calls and
 tokens. Reruns skip claims already in the file.
 """
@@ -27,9 +45,10 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from agent.decompose import BigModel, Decomposer, cache_path, first_json
+from agent.decompose import Decomposer, big_model, cache_path, first_json
 from agent.agent_loop import (NEI, REWARD_LABEL, TRACE_DIR, FeverSearch, LocalVerify, report,
                               reward_version)
+from agent.tools import FIRST, ToolKit, describe
 from core import reward as R
 from verifier.model import (BIG_MODEL, FEVER_LABEL, K_PAGES, LOCAL_MODEL, MAX_CITED, MAX_SENTS_PER_PAGE, SEED,
                             adapter_label, gold_sets, sample_claims)
@@ -64,6 +83,65 @@ confidence is higher than that earlier one's; otherwise abstain. Abstain when
 repeated searches cannot find relevant pages."""
 CONTROLLER_PROMPT = "v2"  # v1: no confidence threshold; v2: retry below 0.70, NEI not overridden by weaker verdicts
 
+# --tools nosearch: v2 without the search action; the claim has already been searched once.
+NOSEARCH_SYSTEM = (CONTROLLER_SYSTEM
+    .replace('  {"action": "search", "query": "<text>"}   find Wikipedia sentences for a query\n', "")
+    .replace("latest search results plus evidence it", "claim's search results plus evidence it")
+    .replace("""Every action costs. Search, then verify. Commit when the verifier's confidence is
+0.70 or higher and its cited evidence is on topic. Search again with a better query
+when the pages found are about the wrong entity, the verifier cites nothing, or its
+confidence is below 0.70; after one such retry, commit the latest verdict.""",
+"""The claim has been searched once and you cannot search again. Every action costs.
+Verify, then commit when the verifier's confidence is 0.70 or higher and its cited
+evidence is on topic. When the verifier cites nothing or its confidence is below
+0.70, you may decompose the claim and verify sub-claims; then commit the latest verdict.""")
+    .replace("""Abstain when
+repeated searches cannot find relevant pages.""", """Abstain when the
+pages found are not relevant."""))
+
+# --tools follow: v2 plus the follow action.
+FOLLOW_SYSTEM = (CONTROLLER_SYSTEM
+    .replace('  {"action": "decompose"}', '''  {"action": "follow", "link": "L3"}        open the page a listed link points to; its
+                                            sentences go first in the verifier's input
+  {"action": "decompose"}''')
+    .replace("""Abstain when
+repeated searches cannot find relevant pages.""", """Follow a link when the
+claim depends on a second entity (a film's director, a person's birthplace) that a
+found sentence links to but no search has opened. Abstain when repeated searches
+and links cannot find relevant pages."""))
+
+# --tools pages: follow plus opening pages by title and listing candidate titles.
+PAGES_SYSTEM = (FOLLOW_SYSTEM
+    .replace('  {"action": "decompose"}', '''  {"action": "open_page", "title": "<title>"} open a Wikipedia page by its title; its
+                                            sentences go first in the verifier's input
+  {"action": "find_pages", "query": "<text>"} list Wikipedia page titles for a query;
+                                            the verifier sees nothing new
+  {"action": "decompose"}''')
+    .replace("""Abstain when repeated searches
+and links cannot find relevant pages.""", """Use find_pages when
+the claim's name is ambiguous (several films, people or places share it) or
+searches keep returning the wrong pages, then open_page the right title. Open a
+page directly when you know its title. Abstain when repeated searches, links and
+pages cannot find relevant pages."""))
+
+# --tools web: pages plus a web search engine restricted to Wikipedia.
+WEB_SYSTEM = (PAGES_SYSTEM
+    .replace('  {"action": "decompose"}', '''  {"action": "web_pages", "query": "<text>"} web search engine over Wikipedia; the
+                                            sentences of the pages it finds replace
+                                            the latest search results
+  {"action": "decompose"}''')
+    .replace("""Open a
+page directly when you know its title.""", """Open a
+page directly when you know its title. Try web_pages when search finds no
+relevant page."""))
+
+SYSTEMS = {"full": CONTROLLER_SYSTEM, "nosearch": NOSEARCH_SYSTEM, "follow": FOLLOW_SYSTEM,
+           "pages": PAGES_SYSTEM, "web": WEB_SYSTEM}
+TOOLSETS = {"full": (), "nosearch": (), "follow": ("follow",), "pages": ("follow", "open_page", "find_pages"),
+            "web": ("follow", "open_page", "find_pages", "web_pages")}  # agent/tools.py tools per preset
+ACTIONS = {name: (() if name == "nosearch" else ("search",)) + TOOLSETS[name]
+           + ("decompose", "verify", "commit", "abstain") for name in SYSTEMS}
+
 class Episode:
     """One claim's state while the controller acts on it."""
 
@@ -77,6 +155,8 @@ class Episode:
         self.sub_verdicts = {}  # subclaim index -> latest verify result
         self.end = None
         self.ctl_calls = self.ctl_in = self.ctl_out = 0
+        self.tools = "full"
+        self.kit = None  # agent.tools.ToolKit for the preset's retrieval tools
 
     def log(self, action, args, result, seconds, controller=None):
         step = {"t": len(self.steps), "action": action, "args": args, "result": result,
@@ -99,6 +179,8 @@ class Episode:
             if a == "search":
                 pages = list(dict.fromkeys(h["page"].replace("_", " ") for h in r["hits"]))
                 out.append(f"search {s['args']['query']!r} -> pages: " + (", ".join(pages) or "none"))
+            elif a in TOOLSETS["web"]:
+                out.append(describe(s))
             elif a == "decompose":
                 out.append(f"decompose -> {len(r['subclaims'])} sub-claims")
             elif a == "verify":
@@ -109,6 +191,10 @@ class Episode:
                            + (f" (confidence {conf:.2f})" if conf is not None else "")
                            + (f", cites: {'; '.join(self.texts.get(e, e) for e in r['evidence'])}"
                               if r["evidence"] else ", cites nothing"))
+        if "follow" in TOOLSETS[self.tools]:
+            shown = self.kit.open_links()
+            out.append("Links: " + ("; ".join(f"{lid} {l['target']} (from {l['source'].rsplit(':', 1)[0].replace('_', ' ')})"
+                                              for lid, l in shown) or "none"))
         out.append(f"Actions left: {MAX_STEPS - len(self.steps)}. Next action?")
         return "\n".join(out)
 
@@ -116,13 +202,15 @@ class Episode:
 def decide(ep, big):
     """Ask the controller for the next action; fall back to a safe default on bad output."""
     t0 = time.time()
-    g = big(CONTROLLER_SYSTEM, ep.observation())
+    g = big(SYSTEMS[ep.tools], ep.observation())
     ep.ctl_calls += 1
     ep.ctl_in += g["in_tokens"]
     ep.ctl_out += g["out_tokens"]
     obj = first_json(g["text"], dict) or {}
     action = obj.get("action")
-    valid = action in ("search", "decompose", "verify", "commit", "abstain")
+    valid = action in ACTIONS[ep.tools]
+    if action in TOOLSETS[ep.tools] and not ep.kit.valid(action, obj):
+        valid = False
     if action == "search" and not str(obj.get("query") or "").strip():
         valid = False
     if action == "verify" and obj.get("subclaim") is not None and not (
@@ -139,11 +227,17 @@ def decide(ep, big):
     return obj, ctl
 
 
-def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, search_k=K):
+def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, search_k=K, tools="full",
+              exa=None):
     eps = [Episode(c) for c in claims]
     texts = {}  # "page:line" -> sentence, shared so observations can quote cited evidence
     for ep in eps:
         ep.texts = texts
+        ep.tools = tools
+        ep.kit = ToolKit(search.r, TOOLSETS[tools], exa)
+    if tools == "nosearch":  # the fixed loop's one search of the claim, before any controller call
+        act(eps, [({"action": "search", "query": ep.c["claim"]}, None) for ep in eps],
+            search, verify, decomposer, None, search_k)
     pool = ThreadPoolExecutor(workers)
     while True:
         live = [ep for ep in eps if ep.end is None]
@@ -171,7 +265,21 @@ def act(live, decisions, search, verify, decomposer, pool, search_k=K):
         for (ep, a, c), hs in zip(searches, hits):
             ep.last_hits = hs
             ep.texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
+            ep.kit.observe(hs)
             ep.log("search", {"query": a["query"], "k": search_k}, {"hits": hs}, s, c)
+
+    for ep, (a, c) in zip(live, decisions):  # agent/tools.py tools, one call at a time
+        if a["action"] not in TOOLSETS[ep.tools]:
+            continue
+        args, res, s = ep.kit.run(a["action"], a, ep.c["claim"])
+        hs = res["hits"]
+        if hs and a["action"] in FIRST:  # the opened page's sentences first, then the rest of the latest results
+            pages = {h["page"] for h in hs}
+            ep.last_hits = hs + [h for h in ep.last_hits if h["page"] not in pages]
+        elif hs:  # web_pages: a new set of results, as search
+            ep.last_hits = hs
+        ep.texts.update({f"{h['page']}:{h['line']}": h["text"] for h in hs})
+        ep.log(a["action"], args, res, s, c)
 
     decomps = [(ep, a, c) for ep, (a, c) in zip(live, decisions) if a["action"] == "decompose"]
     if decomps:
@@ -198,6 +306,7 @@ def act(live, decisions, search, verify, decomposer, pool, search_k=K):
             ep.v_out = getattr(ep, "v_out", 0) + res["_tokens"][1]
             res = {k: v for k, v in res.items() if k != "_tokens"}
             ep.cited = list(dict.fromkeys(ep.cited + res["evidence"]))
+            ep.kit.observe_cited(res["evidence"])
             if a.get("subclaim") is None:
                 ep.claim_verdict = res
             else:
@@ -290,8 +399,9 @@ def to_row(ep, run_info):
     gs = gold_sets(c)
     gold_ids = sorted({f"{p}:{l}" for s in gs for p, l in s})
     count = lambda name: sum(s["action"] == name for s in ep.steps)
-    n_search, n_decompose, n_verify = count("search"), count("decompose"), count("verify")
-    n_ops = n_search + n_decompose + n_verify
+    n_search = count("search") + sum(count(t) for t in TOOLSETS["web"])
+    n_decompose, n_verify = count("decompose"), count("verify")
+    n_ops = n_search + n_decompose + n_verify  # each agent/tools.py call costs as a search
     reward = None
     if fin["verdict"] is not None and fin["confidence"] is not None:
         r, parts = R.total(REWARD_LABEL[gold], REWARD_LABEL[fin["verdict"]], fin["confidence"],
@@ -300,13 +410,16 @@ def to_row(ep, run_info):
     v_in, v_out = getattr(ep, "v_in", 0), getattr(ep, "v_out", 0)
     return {
         "schema": 3 if "claim_ids_manifest" in run_info else SCHEMA,
-        "id": c["id"], "dataset": "fever", "split": "dev",
+        "id": c["id"], "dataset": "fever", "split": run_info.get("split", "dev"),
         "claim": c["claim"], "gold": gold,
         "gold_evidence": [sorted(f"{p}:{l}" for p, l in s) for s in gs],
         "run": run_info,
         "steps": ep.steps,
         "final": {**fin, "ended_by": ep.end},
-        "cost": {"n_search": n_search, "n_decompose": n_decompose, "n_verify": n_verify, "n_ops": n_ops,
+        "cost": {"n_search": n_search, "n_follow": count("follow"),
+                 **{f"n_{t}": count(t) for t in TOOLSETS["web"][1:] if t in TOOLSETS[ep.tools]},
+                 "n_decompose": n_decompose,
+                 "n_verify": n_verify, "n_ops": n_ops,
                  "tokens_in": v_in + ep.ctl_in, "tokens_out": v_out + ep.ctl_out,
                  "seconds": round(sum(s["seconds"] + s.get("controller", {}).get("seconds", 0)
                                       for s in ep.steps), 3),
@@ -320,7 +433,15 @@ def summarize_actions(path):
     with open(path, encoding="utf-8") as f:
         rows = [json.loads(line) for line in f]
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
-    print(f"  searches/claim   {mean([r['cost']['n_search'] for r in rows]):.2f}")
+    print(f"  searches/claim   {mean([r['cost']['n_search'] for r in rows]):.2f} (tool calls included)")
+    print(f"  follows/claim    {mean([r['cost'].get('n_follow', 0) for r in rows]):.2f}")
+    for t in TOOLSETS["web"][1:]:
+        if any(f"n_{t}" in r["cost"] for r in rows):
+            print(f"  {t + ' /claim':16s} {mean([r['cost'].get(f'n_{t}', 0) for r in rows]):.2f}")
+    web = [s["result"] for r in rows for s in r["steps"] if s["action"] == "web_pages"]
+    if web:
+        print(f"  web_pages        {sum(not w.get('cache_hit') for w in web)} live of {len(web)}, "
+              f"${sum(w.get('cost_dollars') or 0 for w in web if not w.get('cache_hit')):.2f} recorded")
     print(f"  decomposes/claim {mean([r['cost']['n_decompose'] for r in rows]):.2f}")
     print(f"  verifies/claim   {mean([r['cost']['n_verify'] for r in rows]):.2f}")
     for end in ("commit", "abstain", "budget"):
@@ -338,26 +459,55 @@ if __name__ == "__main__":
     ap.add_argument("--controller", default=BIG_MODEL)
     ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
     ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
+    ap.add_argument("--train-n", type=int,
+                    help="N unused train claims (agent.action_cache.train_claims) instead of dev")
+    ap.add_argument("--train-seed", type=int, default=2, help="--train-n sample; seed 1 is the controller set")
+    ap.add_argument("--shard", help="I/N: run every Nth claim of the set from I, into its own trace")
     ap.add_argument("--chunk", type=int, default=20)
+    ap.add_argument("--workers", type=int, default=8, help="parallel controller calls per chunk")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--tools", choices=tuple(SYSTEMS), default="full",
+                    help="action set; nosearch and follow are added to the trace tag")
+    ap.add_argument("--exa-cache", default=os.path.join("verifier", "data", "exa-cache"),
+                    help="--tools web: Exa response cache (git-ignored)")
+    ap.add_argument("--exa-network", action="store_true",
+                    help="--tools web: allow live Exa requests (EXA_API_KEY in .env); otherwise cache only")
+    ap.add_argument("--exa-max-requests", type=int, default=100, help="--tools web: live request budget")
     ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
     ap.add_argument("--search-k", type=int, default=K)
     ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     a = ap.parse_args()
     if a.search_k < 1 or a.candidate_pages < 1:
         ap.error("search-k and candidate-pages must be positive")
+    if a.train_n and (a.claim_ids or a.n):
+        ap.error("--train-n replaces --n and --claim-ids")
     from utils.fever_eval import manifest_metadata, manifest_tag, validate_resume_ids
-    selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
-                             ids_file=a.claim_ids)
+    if a.train_n:
+        from agent.action_cache import train_claims
+        selected, split = train_claims(a.train_n, a.train_seed), "train"
+    else:
+        selected = sample_claims(a.n if a.n is not None or a.claim_ids else 900, SEED,
+                                 ids_file=a.claim_ids)
+        split = "dev"
     a.n = len(selected)
+    shard = ""
+    if a.shard:
+        i, n = map(int, a.shard.split("/"))
+        if not 0 <= i < n:
+            ap.error("--shard I/N needs 0 <= I < N")
+        selected, shard = selected[i::n], f"_shard{i}of{n}"
 
     run = "prompted-" + (adapter_label(a.adapter) if a.adapter else "base")
-    run += f"_{a.tag}" if a.tag else ""
+    # a non-default controller is named in the trace, so it never resumes another controller's file
+    ctl_tag = "" if a.controller == BIG_MODEL else "ctl-" + a.controller.split("/")[-1].replace(".", "p")
+    tag = "_".join(t for t in (a.tag, ctl_tag, "" if a.tools == "full" else a.tools) if t)
+    run += f"_{tag}" if tag else ""
     search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
     run += f"_{search_tag}"
     run += f"_{manifest_tag(a.claim_ids)}" if a.claim_ids else ""
+    run += f"_unused-seed{a.train_seed}" if a.train_n else ""
     os.makedirs(TRACE_DIR, exist_ok=True)
-    path = os.path.join(TRACE_DIR, f"fever_dev_{run}_n{a.n}.jsonl")
+    path = os.path.join(TRACE_DIR, f"fever_{split}_{run}_n{a.n}{shard}.jsonl")
 
     done = set()
     if os.path.exists(path):
@@ -368,18 +518,32 @@ if __name__ == "__main__":
     claims = [c for c in selected if c["id"] not in done]
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
-        big = BigModel(a.controller)
-        decomposer = Decomposer(big, cache_path(big.name, a.n, claim_ids=a.claim_ids))
+        big = big_model(a.controller)
+        decomposer = Decomposer(big, cache_path(big.name, a.n, split=split, claim_ids=a.claim_ids))
         search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
+        exa = None
+        if a.tools == "web":
+            from agent.decompose import load_env
+            from retrieval.exa import ExaClient
+            load_env()
+            exa = ExaClient(a.exa_cache, allow_network=a.exa_network, max_requests=a.exa_max_requests)
         run_info = {"policy": "prompted", "controller": big.name, "verifier": verify.name,
-                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS, "controller_prompt": CONTROLLER_PROMPT,
+                    "reward_version": reward_version(), "seed": SEED, "max_steps": MAX_STEPS,
+                    "controller_prompt": CONTROLLER_PROMPT + ("" if a.tools == "full" else f"-{a.tools}"),
+                    "tools": a.tools, "tool_names": list(TOOLSETS[a.tools]),
+                    **({"exa": {"cache": a.exa_cache, "network": a.exa_network,
+                                "max_requests": a.exa_max_requests,
+                                "include_domains": ["en.wikipedia.org"]}} if exa else {}),
                     "decomposer_prompt": decomposer.prompt, "final_rule": FINAL_RULE,
+                    "split": split,
+                    **({"train_claims": {"n": a.n, "seed": a.train_seed, "shard": a.shard}} if a.train_n else {}),
                     **manifest_metadata(a.claim_ids)}
         run_info["policy"] = f"prompted-{search_tag}"
         t0 = time.time()
         for i in range(0, len(claims), a.chunk):
-            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info, search_k=a.search_k)
+            rows = run_chunk(claims[i:i + a.chunk], search, verify, big, decomposer, run_info,
+                             workers=a.workers, search_k=a.search_k, tools=a.tools, exa=exa)
             with open(path, "a", encoding="utf-8") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")

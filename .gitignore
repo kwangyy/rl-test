@@ -51,3 +51,6 @@ verifier/experiments/**/artifacts/checkpoints/**/tokenizer.json
 verifier/experiments/**/artifacts/checkpoints/**/tokenizer_config.json
 verifier/experiments/**/artifacts/checkpoints/**/chat_template.jinja
 verifier/experiments/**/artifacts/checkpoints/**/README.md
+
+# Exa web search responses (retrieval/exa.py cache)
+verifier/data/exa-cache/

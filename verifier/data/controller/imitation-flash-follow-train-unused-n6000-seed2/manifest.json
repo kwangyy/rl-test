@@ -1,0 +1,45 @@
+{
+ "description": "Prompted-controller trajectories on unused FEVER train claims, for controller imitation (behavioural cloning) and controller GRPO claim screening.",
+ "claims": {
+  "source": "verifier/data/fever/train.jsonl",
+  "n": 6000,
+  "per_label": 2000,
+  "sampler": "agent.action_cache.train_claims(6000, seed=2): excludes every train ID in verifier/data/eval/fever-evaluation-v1/usage-audit.json (all SFT/GRPO data) and reserved calibration/holdout IDs",
+  "overlap_with_controller_set_train_unused-n1500-seed1": 69
+ },
+ "command": "python -m agent.prompted --tools follow --train-n 6000 --shard {0,1,2}/3 --chunk 64 --workers 32 --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
+ "controller": "qwen/qwen3.8-flash",
+ "controller_prompt": "v2-follow",
+ "tools": "follow",
+ "verifier": "Qwen/Qwen3.5-2B+sft-direct-from-base-qwen3p5-2b-5895-samples_run1",
+ "final_rule": "v3",
+ "max_steps": 8,
+ "retrieval": "prompted-bm25-p5-k100",
+ "seed": 0,
+ "reward_version": null,
+ "date": "2026-10-28",
+ "base_revision": "a2b1c07 plus the agent/ changes committed with this data",
+ "files": {
+  "traces-shard0of3.jsonl.gz": {
+   "rows": 2000,
+   "sha256": "988c572c15e6079f981f58329cc860e543015b459c03ee9bdeb3271efb57a839"
+  },
+  "traces-shard1of3.jsonl.gz": {
+   "rows": 2000,
+   "sha256": "32d32377359cf64477a17beed1116e0c10364c19963cbe84375e3360ea97ab47"
+  },
+  "traces-shard2of3.jsonl.gz": {
+   "rows": 2000,
+   "sha256": "315008f22874b7d115282f227a6fa8e65d3b0ef1eff32c7cb29f2675baa78def"
+  }
+ },
+ "format": "agent/docs trace schema 2 (one JSON row per claim: steps with controller text/validity, final, cost, reward, gold)",
+ "results": {
+  "fever_score": 0.693,
+  "accuracy": 0.797,
+  "fever_correct_trajectories": 4157,
+  "valid_controller_calls": 0.983,
+  "openrouter_cost_dollars": 2.1
+ },
+ "license": "Claims and evidence from FEVER (CC BY-SA 3.0 Wikipedia text)."
+}
