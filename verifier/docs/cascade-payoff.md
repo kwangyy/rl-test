@@ -25,9 +25,7 @@ eval-v1 calibration IDs. The holdout set was not touched. Models:
 - `qwen/qwen3.8-flash` via OpenRouter.
 
 Every threshold, margin and learned weight is fitted on calibration and
-scored on dev. The AVeriTeC section reuses the gold-QA runs from
-[averitec-transfer.md](averitec-transfer.md); AVeriTeC has no calibration
-split, so it is scored with the thresholds fitted on FEVER calibration.
+scored on dev.
 
 Code: `verifier/evaluation/cascade_payoff.py`. Run directories:
 `verifier/evaluation/results/{sft,baseline,big}-direct-cap160/cascade-{dev,cal}900/`.
@@ -63,22 +61,6 @@ The base 2B adds little: 0.459 accuracy alone against flash's 0.714. Every
 fitted policy ends up routing about 90% of claims, and the oracle router
 (0.764) is only 5 points above flash alone.
 
-## AVeriTeC dev (500, gold QA evidence)
-
-| Small model | Small alone | Threshold rule (FEVER-fitted t) | Route SUP/REF | Route NEI | Learned router | flash alone | Oracle |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| SFT 2B | 0.298 | 0.408 (30%) | 0.298 (18%) | 0.814 (82%) | 0.504 (54%) | 0.814 | 0.894 (60%) |
-| Base 2B | 0.692 | 0.814 (99%) | 0.764 (87%) | 0.742 (13%) | 0.776 (47%) | 0.814 | 0.872 (18%) |
-
-Percentages are the share of claims routed. A lower threshold sends fewer
-base-2B claims to flash: the FEVER-fitted 20% and 40% thresholds reach 0.770
-at 29% routed and 0.812 at 64% (the `fractions` rows in
-`results/cascade-payoff/averitec-baseline.json`).
-
-**The FEVER rule does not transfer.** On AVeriTeC the SFT 2B's errors are
-false NEIs, so the opposite rule is the right one. Rules and routers fitted
-on FEVER pick the wrong claims to hand off.
-
 ## What this says
 
 1. **For routing between these two models, hand-written rules are enough.**
@@ -89,9 +71,7 @@ on FEVER pick the wrong claims to hand off.
    it, a controller would have to *do* something: re-search, follow a link,
    sample again or ask for a second opinion. The routing decision alone
    can't close it.
-3. **Any rule is dataset-specific.** The best FEVER rule is the wrong rule
-   on AVeriTeC, so a fixed rule needs a check on the target data.
-4. **Cost is not the argument for the 2B.** Running flash on all 900 claims
+3. **Cost is not the argument for the 2B.** Running flash on all 900 claims
    costs $0.20 ($0.0002 a claim). A cascade saves cents. The case for a
    local 2B is latency, offline use or keeping data local, not price.
 
@@ -100,7 +80,6 @@ on FEVER pick the wrong claims to hand off.
 - One seed, greedy decoding, one SFT checkpoint, direct prompt only.
 - On FEVER, retrieval misses cap both models: 83 dev claims have no gold
   evidence in context, and FEVER score is 0 for all of them.
-- AVeriTeC uses gold evidence, and its thresholds are fitted on FEVER.
 
 ## Reproduce
 
@@ -111,7 +90,6 @@ python -m verifier.evaluation.cascade_payoff \
   --big-cal   $R/big-direct-cap160/cascade-cal900/predictions.jsonl \
   --small     $R/sft-direct-cap160/cascade-dev900/predictions.jsonl \
   --big       $R/big-direct-cap160/cascade-dev900/predictions.jsonl
-# AVeriTeC: --metrics correct, --small/--big = $R/averitec-{sft,baseline,big}-direct-cap160/run1/predictions.jsonl
 # Model runs: python -m verifier.evaluation.eval_verifier --model local|qwen/qwen3.8-flash \
 #   --retrieval titles --prompt-style direct --claim-ids <ids> --output <run dir>/predictions.jsonl [--adapter <sft>]
 ```

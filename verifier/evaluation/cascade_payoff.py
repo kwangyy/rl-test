@@ -144,7 +144,7 @@ def main():
     p.add_argument("--small", required=True)
     p.add_argument("--big", required=True)
     p.add_argument("--metrics", default="correct,fever_score",
-                   help="comma-separated boolean prediction fields (AVeriTeC has only 'correct')")
+                   help="comma-separated boolean prediction fields")
     p.add_argument("--name", default="cascade")
     p.add_argument("--output", help="write the full result as JSON")
     args = p.parse_args()

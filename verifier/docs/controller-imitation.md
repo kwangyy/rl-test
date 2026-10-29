@@ -6,7 +6,8 @@ LoRA on Qwen3.5-2B was then trained to copy flash's controller decisions (behavi
 cloning) and run in the same loop on dev 900. The verifier is the frozen
 `sft-direct-from-base-qwen3p5-2b-5895-samples/run1` adapter throughout.
 
-The next step, multi-turn GRPO of this controller, is set out in section 5.
+The next step, multi-turn GRPO of this controller, is handed over in
+[controller-grpo-handover.md](controller-grpo-handover.md).
 
 ## 1. Data
 
@@ -95,56 +96,7 @@ loop, so it has no paired comparison here.
   got each claim right would score 0.730; the oracle over the six cached actions of
   the offline study was 0.819.
 
-## 5. Handoff: multi-turn GRPO of the controller
+## 5. Next: multi-turn GRPO of the controller
 
-Start from the run1 imitation adapter (retrain with `train.py`, or copy the 84 MB
-checkpoint out of band) and keep the 5895 verifier frozen.
-
-What exists:
-
-- `agent/prompted.py` runs a chunk of claims in lockstep. With `--controller
-  local:<dir>`, `LocalController.batch` (`agent/decompose.py`) answers all live
-  episodes of a chunk in one generate call. Every row records each step's
-  action, arguments and result, the controller's raw text and validity, the final answer and
-  `reward` (`core/reward.py` `R.total`: harm-weighted correctness, calibration,
-  evidence and a per-operation cost), plus `cost.n_ops`.
-- `utils/build_controller_imitation.replay` rebuilds the exact observation before any
-  step of a saved trace, which is what a trainer needs to recompute log-probs.
-
-What is missing:
-
-1. **Sampling.** `verifier.model.LocalModel` generates greedily (`do_sample=False`).
-   Rollouts need a temperature option on `LocalModel`/`LocalController`, and a way
-   to run G rollouts per claim (for example, G copies of each claim in one chunk).
-2. **Log-probs.** Recompute the policy's log-probs of each controller completion given
-   its observation (system prompt + observation as in `train.py`; loss on completion
-   tokens only, observations masked).
-3. **The trainer.** One episode reward per rollout; advantage = reward − group mean
-   (optionally / group std) over the G rollouts of a claim, applied to the tokens of
-   every controller step in that rollout. KL to the imitation adapter.
-   `verifier/experiments/_shared/grpo.py` is single-turn; it shows the group
-   advantage and KL code but not the multi-turn rollout.
-
-Choices to make:
-
-- **Reward.** FEVER score (0/1) minus λ·`n_ops`, or `R.total`. The offline study used
-  FEVER score with λ = 0.01–0.02.
-- **Claims.** Train on unused train claims only: the 6,000 above, or a new draw with
-  `--train-n N --train-seed 3`. Never the dev 900, calibration or holdout IDs. Screen
-  claims by reward spread across the policy's own G samples, as the verifier GRPO's
-  `--filter` did. Flash's 1,843 FEVER-0 episodes show where the gold never reached
-  the verifier (`final.evidence` vs `gold_evidence`), which is where search and follow
-  choices can matter.
-- **Compute.** Verifier calls dominate rollout time: about 10 s per claim per rollout
-  at chunk 64 on the 16 GB card, so 8 rollouts of 1,000 claims take about a day
-  locally. Two processes fit on 16 GB; three overflow it. A SoC GPU is the realistic
-  place for this.
-
-Practical notes:
-
-- The decomposer calls flash (`OPENROUTER_API_KEY`) on claims missing from its cache.
-  Flash decomposed 39 of 6,000 train claims, so this is rare but needs a key.
-- Invalid controller output falls back to a safe action (`decide`); count it in the
-  reward or penalise it, or the policy can learn to emit invalid output.
-- Evaluate a GRPO checkpoint exactly as section 3 did, against the traces in
-  `dev900-follow-controller-traces/` with McNemar.
+The handover for this step, with setup, what to build, a pilot plan and the
+verifier swap, is [controller-grpo-handover.md](controller-grpo-handover.md).
