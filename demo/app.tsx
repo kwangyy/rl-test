@@ -21,7 +21,7 @@ export type Step = {
     t: number;
     action: string;
     args: { query?: string };
-    result: { hits?: Hit[]; verdict?: string | null; subclaims?: string[] };
+    result: { hits?: Hit[]; verdict?: string | null; subclaims?: string[]; reasoning?: string | null };
     seconds: number;
 };
 export type Row = {
@@ -30,7 +30,7 @@ export type Row = {
     final: { verdict: string | null; evidence: string[]; confidence: number | null };
 };
 
-export const getJson = async <T,>(path: string): Promise<T> => {
+const getJson = async <T,>(path: string): Promise<T> => {
     const res = await fetch(path);
     if (!res.ok) throw new Error((await res.json()).detail ?? "Request failed.");
     return res.json();
@@ -38,11 +38,11 @@ export const getJson = async <T,>(path: string): Promise<T> => {
 
 export const pretty = (s?: string | null) => s?.replaceAll("_", " ").toLowerCase() ?? "no valid verdict";
 
-export const tones = {
-    good: { box: "bg-emerald-50 text-emerald-900 ring-emerald-200", dot: "bg-emerald-500" },
-    bad: { box: "bg-rose-50 text-rose-900 ring-rose-200", dot: "bg-rose-500" },
-    unsure: { box: "bg-amber-50 text-amber-900 ring-amber-200", dot: "bg-amber-500" },
-    none: { box: "bg-muted/50 text-muted-foreground ring-border/50", dot: "bg-muted-foreground/50" },
+const tones = {
+    good: { box: "bg-emerald-50 text-emerald-900 ring-emerald-200", dot: "bg-emerald-500 text-emerald-700" },
+    bad: { box: "bg-rose-50 text-rose-900 ring-rose-200", dot: "bg-rose-500 text-rose-700" },
+    unsure: { box: "bg-amber-50 text-amber-900 ring-amber-200", dot: "bg-amber-500 text-amber-700" },
+    none: { box: "bg-muted/50 text-muted-foreground ring-border/50", dot: "bg-muted-foreground/50 text-muted-foreground/50" },
 };
 export const toneOf = (v?: string | null) =>
     !v ? tones.none : /support/i.test(v) ? tones.good : /refut/i.test(v) ? tones.bad : tones.unsure;
@@ -149,7 +149,11 @@ function App() {
             run: (d) => { setClaim(d.claim); setStatus(d.replay ? "Replaying saved run…" : "Checking claim…"); },
             action: (d) => setStatus(`${d.action}…`),
             step: (d) => setSteps((prev) => [...prev, d.step]),
-            final: (d) => { setRow(d.row); setSteps(d.row.steps); setStatus("Complete"); finish(); },
+            final: (d) => {
+                setRow(d.row); setSteps(d.row.steps); setStatus("Complete"); finish();
+                // --save-live may have written a new trace file: offer it in Browse without a reload
+                if (isLive) getJson<Trace[]>("/api/traces").then(setTraces).catch(() => undefined);
+            },
             error: (d) => finish(d.message),
         };
 

@@ -2,7 +2,7 @@
 
 import unittest
 
-from verifier.model import COT_SFT_SYSTEM, REASONING_SYSTEM, adapter_label, score
+from verifier.model import COT_SFT_SYSTEM, REASONING_SYSTEM, adapter_label, parse, reasoning_of, score
 
 
 class ReasoningScoreTest(unittest.TestCase):
@@ -52,6 +52,22 @@ class ReasoningScoreTest(unittest.TestCase):
         self.assertIsNone(result["stated_conf"])
         self.assertFalse(score(claim, context, generation)["format_ok"])
         self.assertNotIn('"confidence"', COT_SFT_SYSTEM)
+
+class ReasoningOfTest(unittest.TestCase):
+    """`reasoning_of` is what the agent loop keeps as `steps[].result.reasoning`."""
+
+    def test_reasoning_field_is_returned(self):
+        text = '{"reasoning":"E1 supports the claim.","verdict":"SUPPORTED","evidence":["E1"],"confidence":0.8}'
+        self.assertEqual(reasoning_of(text, parse(text)[0]), "E1 supports the claim.")
+
+    def test_native_thinking_block_is_returned(self):
+        text = "E1 names the writer.\n\u003c/think\u003e\n" + '{"verdict":"SUPPORTED","evidence":["E1"]}'
+        self.assertEqual(reasoning_of(text, parse(text)[0]), "E1 names the writer.")
+
+    def test_direct_answer_has_no_reasoning(self):
+        text = '{"verdict":"REFUTED","evidence":["E1"],"confidence":0.2}'
+        self.assertIsNone(reasoning_of(text, parse(text)[0]))
+        self.assertIsNone(reasoning_of("not json", {}))
 
 
 if __name__ == "__main__":

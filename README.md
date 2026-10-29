@@ -37,7 +37,7 @@ python -m agent.server --no-live
 
 FastAPI serves the built UI and `/api/*` together; there is no Bun process or separate proxy to run. Browse lists saved claims in a searchable table with outcome filters; open a claim to inspect its full trace. Replay plays the recorded steps in order. Both use committed traces, so they need no GPU, index or API key. Start the Python server without `--no-live` to enable live claims; see [backend setup and requirements](verifier/docs/live-backend.md#22-run-it).
 
-The live verifier allows 160 output tokens; override with `--max-new-tokens`. Invalid replies are logged in the server terminal.
+The live verifier answers with `--prompt-style direct` by default: JSON only, 160 output tokens. `reasoning`, `cot_sft`, `cot_chain`, `cot_brief` and `cot_native` ask it to explain itself; that explanation is stored as `steps[].result.reasoning` and shown under the verify step, and each style brings its own output budget (160–1024 tokens); override with `--max-new-tokens`. Invalid replies are logged in the server terminal. Add `--save-live <name>` to append every finished live run to `verifier/data/traces/fever_dev_<name>.jsonl`, which Browse and replay then show like any other trace (free-text runs get a `live-<n>` id).
 
 For another controller API, set `CONTROLLER_BASE_URL` and `CONTROLLER_API_KEY_ENV` (the name of its key variable) in root `.env`, then select the model with `--controller`.
 

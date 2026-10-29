@@ -39,15 +39,15 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
                         <input type="search" className={fieldClass} value={query} placeholder="Claim text or ID"
                             onChange={event => { setQuery(event.target.value); setPage(0); }} />
                     </label>
-                    <div className="flex flex-col gap-1.5 text-sm font-medium w-44" role="group" aria-label="Outcome">
+                    <div className="flex flex-col gap-1.5 text-sm font-medium w-32" role="group" aria-label="Outcome">
                         <span>Outcome</span>
                         <Select value={outcome}
                             onChange={value => { setOutcome(value as Outcome | "all"); setPage(0); }}
                             options={[
-                                { value: "all", label: "All outcomes" },
+                                { value: "all", label: "All" },
                                 { value: "correct", label: "Correct" },
                                 { value: "incorrect", label: "Incorrect" },
-                                { value: "invalid", label: "Invalid verdict" },
+                                { value: "invalid", label: "Invalid" },
                                 { value: "unscored", label: "Unscored" },
                             ]} />
                     </div>
@@ -82,8 +82,8 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
                                                 {claim.claim}
                                             </button>
                                         </td>
-                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${goldTone.box} bg-transparent`}>{claim.gold == null ? "—" : pretty(claim.gold)}</td>
-                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${verdictTone.box} bg-transparent`}>{pretty(claim.verdict)}</td>
+                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${goldTone.dot} bg-transparent`}>{claim.gold == null ? "—" : pretty(claim.gold)}</td>
+                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${verdictTone.dot} bg-transparent`}>{pretty(claim.verdict)}</td>
                                         <td className="whitespace-nowrap px-2.5 py-2 text-center tabular-nums">{claim.confidence == null ? "—" : `${(claim.confidence * 100).toFixed(1)}%`}</td>
                                         <td className={`whitespace-nowrap px-2.5 py-2 text-center capitalize ${result === "correct" ? "text-emerald-700" : result === "incorrect" ? "text-rose-700" : "text-muted-foreground"}`}>{result}</td>
                                         <td className="whitespace-nowrap px-2.5 py-2 text-center tabular-nums">{claim.n_steps}</td>

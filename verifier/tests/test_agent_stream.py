@@ -36,6 +36,7 @@ class FakeVerify:
                  "evidence": ev[1:2] if "owned" not in c else [],
                  "confidence": 0.9,
                  "token_prob": {"SUPPORTED": 0.9, "REFUTED": 0.05, "NOT_ENOUGH_INFO": 0.05},
+                 "reasoning": f"E2 decides it for {c[:3]}.",
                  "_tokens": (100, 5)} for c, ev in zip(claims, evidences)]
 
 
@@ -88,6 +89,8 @@ def test_fixed_stream_matches_batch_row(claim):
     row = events[-1]["row"]
     assert timeless(row) == timeless(batch)
     assert [e["step"] for e in events if e["event"] == "step"] == row["steps"]
+    # the verifier's own explanation rides along in the verify step, so the UI can show it
+    assert row["steps"][1]["result"]["reasoning"] == "E2 decides it for Ada."
     # same action/step sequence as a replay of the saved row
     replay = list(stream.replay(row))
     assert [e["event"] for e in replay] == ["run", "action", "step", "action", "step", "action", "step", "final"]
@@ -196,6 +199,46 @@ def test_live_refuses_reserved_claims(tmp_path):
     if not held:
         pytest.skip("no reserved manifests in this checkout")
     assert client(tmp_path).get("/api/live", params={"id": held[0]}).status_code == 403
+
+
+def test_prompt_style_sets_the_verifier_budget(tmp_path):
+    from verifier.model import DEFAULT_MAX_NEW_TOKENS, PROMPT_STYLES
+    assert set(PROMPT_STYLES) == {"direct", "reasoning", "cot_sft", "cot_chain", "cot_brief", "cot_native"}
+    assert Backends(prompt_style="cot_chain").max_new_tokens == DEFAULT_MAX_NEW_TOKENS["cot_chain"] == 512
+    assert Backends(prompt_style="cot_native").max_new_tokens == 1024
+    assert Backends(prompt_style="direct").max_new_tokens == 160
+    assert Backends(max_new_tokens=64).max_new_tokens == 64  # an explicit budget wins
+    backends = Backends(search=FakeSearch(), verify=FakeVerify(), prompt_style="cot_brief")
+    health = TestClient(create_app(backends, trace_dir=str(tmp_path))).get("/api/health").json()
+    assert (health["prompt_style"], health["max_new_tokens"]) == ("cot_brief", 512)
+
+
+def test_save_live_appends_dev_claim_rows(tmp_path):
+    from agent.server import live_trace_path
+    c = client(tmp_path, save_live="reasoning-demo")
+    events = parse_sse(c.get("/api/live", params={"id": 7, "search_k": 3}).text)
+    path = tmp_path / "fever_dev_reasoning-demo.jsonl"
+    saved = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert saved == [events[-1]["row"]]
+    assert saved[0]["steps"][1]["result"]["reasoning"]  # what the UI renders
+    # the saved row is a normal trace: listed, summarised, replayable
+    assert c.get("/api/traces").json() == [{"name": "fever_dev_reasoning-demo.jsonl", "rows": 1}]
+    replay = parse_sse(c.get("/api/traces/fever_dev_reasoning-demo.jsonl/7/replay", params={"delay": 0}).text)
+    assert replay[-1]["row"] == saved[0]
+    # a second run appends; a free-text run is saved with a live-<n> id, since it has none
+    c.get("/api/live", params={"id": 8, "search_k": 3})
+    events = parse_sse(c.get("/api/live", params={"claim": "Ada Lovelace wrote an algorithm.",
+                                                  "search_k": 3}).text)
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["id"] for row in rows] == [7, 8, "live-3"]
+    live = rows[-1]
+    assert (live["dataset"], live["gold"], live["reward"]) == ("live", None, None)
+    assert events[-1]["row"] == live          # the UI sees the id the file has
+    assert c.get("/api/traces/fever_dev_reasoning-demo.jsonl/live-3").json() == live
+    assert live_trace_path(str(tmp_path), "x") == str(tmp_path / "fever_dev_x.jsonl")
+    for bad in ("", "a/b", "../etc", ".hidden", "x y"):
+        with pytest.raises(ValueError):
+            live_trace_path(str(tmp_path), bad)
 
 
 def test_live_reports_errors_as_events(tmp_path):

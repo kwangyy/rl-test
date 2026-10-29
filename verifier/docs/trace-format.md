@@ -23,7 +23,7 @@ the steps log are in `core/interfaces.py`.
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | int | Format version, starts at 1 |
-| `id` | int or str | Claim id from the dataset |
+| `id` | int or str | Claim id from the dataset; `live-<n>` for a saved free-text run, `null` when unsaved |
 | `dataset`, `split` | str | `fever` / `scifact` / `averitec`; `train` / `dev` / `test` |
 | `claim` | str | Claim text |
 | `gold` | str | Gold label |
@@ -42,9 +42,15 @@ Each step is `{"t": <int>, "action": <str>, "args": {...}, "result": {...}, "sec
 |---|---|---|
 | `search` | `query`, `k` | `hits`: list of `{page, line, text, score}` (interface 1) |
 | `decompose` | `claim` | `subclaims`: list of str |
-| `verify` | `claim`, `evidence` (`"page:line"` list) | `verdict`, `evidence`, `confidence`, `token_prob` (`{SUPPORTED, REFUTED, NOT_ENOUGH_INFO}`) (interface 2) |
+| `verify` | `claim`, `evidence` (`"page:line"` list) | `verdict`, `evidence`, `confidence`, `token_prob` (`{SUPPORTED, REFUTED, NOT_ENOUGH_INFO}`), `reasoning` (interface 2) |
 | `abstain` | `{}` | `{}` |
 | `commit` | `{}` | `{}` |
+
+`verify.result.reasoning` is the verifier's own explanation, recorded when its
+prompt asks for one (`--prompt-style reasoning|cot_sft|cot_chain|cot_brief`, or
+`cot_native`, whose native thinking block is kept): the parsed `reasoning` field,
+or the generated text before `"</think>"`. The `direct` prompt and rows written
+before it was added have no such key, so readers must treat it as optional.
 
 `abstain` and `commit` end the episode and are always the last step,
 unless the budget ran out (`ended_by: "budget"`). The controller's

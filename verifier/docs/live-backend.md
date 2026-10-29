@@ -59,14 +59,26 @@ for Bun's hot-reloading server and SSE proxy.
 | `--model`, `--adapter` | `Qwen/Qwen3.5-2B`, none | Verifier, as in `agent_loop.py` and `eval_verifier.py` |
 | `--method`, `--candidate-pages` | `bm25`, 5 | Search, as in `agent_loop.py` |
 | `--controller` | `qwen/qwen3.8-flash` | Big model for `policy=prompted`; needs `OPENROUTER_API_KEY` in `.env` |
-| `--max-new-tokens` | 160 | Verifier output budget; invalid replies are logged in the terminal |
+| `--prompt-style` | `direct` | Verifier prompt: `direct` (JSON only), `reasoning`, `cot_sft`, `cot_chain`, `cot_brief`, or `cot_native` (Qwen native thinking). Every other style also fills `steps[].result.reasoning`, which the UI shows under the step. |
+| `--max-new-tokens` | the style's budget | Verifier output limit: 160 for `direct`, 320 for `reasoning` and `cot_sft`, 512 for `cot_chain` and `cot_brief`, 1024 for `cot_native`. Invalid replies are logged in the terminal. |
 | `--host`, `--port` | `127.0.0.1`, 8000 | Bind address |
 | `--cors` | `*` | Allowed browser origins |
 | `--no-live` | off | Disable `/api/live` |
+| `--save-live` | off | Append each finished live claim row to `<traces>/fever_dev_<NAME>.jsonl` |
 | `--allow-reserved` | off | Allow calibration and holdout claim ids in `/api/live` |
 
 The index and verifier load on the first live request, not at startup. A
 missing FEVER index makes that request end with an `error` event.
+
+`--save-live <name>` turns live runs into ordinary traces: every finished run appends its
+`final.row` (same object as [trace format](trace-format.md)) to `fever_dev_<name>.jsonl`
+in the trace directory, so it appears in `/api/traces`, can be replayed and survives a
+restart. A dev-claim run keeps its FEVER id; a free-text run has none, so it is saved
+with a `live-<n>` id (`n` is its position in the file).
+
+```
+uv run python -m agent.server --prompt-style cot_brief --save-live demo
+```
 
 ### 2.3 Endpoints
 
@@ -75,7 +87,7 @@ All are `GET`, so a browser `EventSource` can open the streams.
 | Path | Returns |
 |---|---|
 | `/` and built asset paths | Prebuilt UI from `demo/dist/`, when its `index.html` exists |
-| `/api/health` | `live`, `policies`, which backends have `loaded`, and the model, adapter, search and controller settings |
+| `/api/health` | `live`, `policies`, which backends have `loaded`, and the model, adapter, `prompt_style`, `max_new_tokens`, search and controller settings |
 | `/api/live?id=<FEVER dev id>&policy=fixed\|prompted&search_k=<1–100>` | SSE stream for a dev claim. The row has gold, gold evidence and reward. |
 | `/api/live?claim=<text>&policy=...` | SSE stream for free text. The row has `dataset: "live"`, `split`, `gold` and `reward` null, and `gold_evidence: []`. |
 | `/api/traces` | `[{name, rows}]` for each `.jsonl` in `verifier/data/traces/` |
@@ -101,7 +113,7 @@ repeats the type as `event`. A stream ends after `final` or `error`.
 | `status` | `message` | Live only: the index and verifier are loading (first request). |
 | `run` | `claim`, `id`, `policy`, `run` (the trace row's `run` object); `replay: true` on replays | Once, first |
 | `action` | `t`, `action`, `args`; `controller` (the call that chose it) for `prompted` | The action is chosen and about to run. Use it to show "searching …". |
-| `step` | `step`: one trace step `{t, action, args, result, seconds[, controller]}` | The action finished. Same object as `row.steps[t]`. |
+| `step` | `step`: one trace step `{t, action, args, result, seconds[, controller]}`; a `verify` result carries `reasoning` when the prompt style asks for it | The action finished. Same object as `row.steps[t]`. |
 | `final` | `row`: the full trace row ([trace format](trace-format.md)) | Once, last |
 | `error` | `message` (`<ExceptionType>: <text>`) | The run failed and the stream ends |
 

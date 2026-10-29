@@ -39,7 +39,8 @@ from core.interfaces import Hit
 from retrieval.build_bm25_index import DATA
 from retrieval.fever_retrieval import FeverRetriever
 from verifier.model import (FEVER_LABEL, K_PAGES, LABELS, LOCAL_MODEL, MAX_CITED, MAX_SENTS_PER_PAGE, SEED,
-                    adapter_label, gold_sets, label_probs, parse, render, sample_claims)
+                    SYSTEM, adapter_label, gold_sets, label_probs, parse, reasoning_of, render,
+                    sample_claims)
 
 TRACE_DIR = os.path.join(DATA, "..", "traces")
 ARCHIVED_EVAL_DIR = os.path.join(DATA, "..", "..", "evaluation", "results", "archive")
@@ -78,13 +79,16 @@ class FeverSearch:
 
 
 class LocalVerify:
-    """interfaces.Verify with untrained baseline's prompt and model. Evidence ids are
+    """interfaces.Verify with a verifier prompt and model. Evidence ids are
     numbered E1..En in the order given, the model's cited E-ids are mapped back
-    to "page:line", and confidence is the verdict-token probability."""
+    to "page:line", confidence is the verdict-token probability, and the model's
+    own explanation is kept as `reasoning` for the trace and the live stream."""
 
-    def __init__(self, search, model=LOCAL_MODEL, adapter=None, *, max_new_tokens=160):
+    def __init__(self, search, model=LOCAL_MODEL, adapter=None, *, system_prompt=SYSTEM,
+                 max_new_tokens=160, enable_thinking=False):
         from verifier.model import LocalModel
-        self.m = LocalModel(model, adapter=adapter, max_new_tokens=max_new_tokens)
+        self.m = LocalModel(model, adapter=adapter, system_prompt=system_prompt,
+                            max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
         self.name = self.m.name
         self.r = search.r
 
@@ -112,6 +116,7 @@ class LocalVerify:
             out.append({"verdict": verdict, "evidence": cited,
                         "confidence": probs.get(verdict) if verdict else None,
                         "token_prob": probs,
+                        "reasoning": reasoning_of(g["text"], obj),
                         "_tokens": (g["in_tokens"], g["out_tokens"])})  # loop-internal, not part of Verify
         return out
 

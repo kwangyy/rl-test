@@ -97,6 +97,12 @@ Reply immediately with exactly one complete JSON object and nothing else:
 
 Use [] for NOT_ENOUGH_INFO evidence. For other verdicts, cite at most 5 decisive E ids. Finish the JSON after the four fields."""
 
+PROMPT_STYLES = {"direct": SYSTEM, "reasoning": REASONING_SYSTEM, "cot_sft": COT_SFT_SYSTEM,
+                 "cot_chain": COT_CHAIN_SYSTEM, "cot_brief": COT_BRIEF_SYSTEM,
+                 "cot_native": NATIVE_THINKING_SYSTEM}
+DEFAULT_MAX_NEW_TOKENS = {"direct": 160, "reasoning": 320, "cot_sft": 320,
+                          "cot_chain": 512, "cot_brief": 512, "cot_native": 1024}
+
 OUT_DIR = os.path.join(DATA, "..", "..", "evaluation", "results", "manual")
 VERDICT_PREFIX = re.compile(r'"verdict"\s*:\s*"')
 
@@ -351,12 +357,21 @@ class OpenRouterModel:
 
 # ---------------------------------------------------------------- run
 
+def reasoning_of(text, obj):
+    """The verifier's own explanation: its `reasoning` field, or the native thinking block when present.
+
+    text: the raw generation; obj: its parsed JSON object ({} when unparsable).
+    """
+    reasoning = obj.get("reasoning") if isinstance(obj.get("reasoning"), str) else None
+    if "</think>" in text:
+        native = text.split("</think>", 1)[0].replace("<think>", "").strip()
+        reasoning = native or reasoning
+    return reasoning
+
+
 def score(claim, ctx, gen, require_confidence=True):
     obj, ok = parse(gen["text"])
-    reasoning = obj.get("reasoning") if isinstance(obj.get("reasoning"), str) else None
-    if "</think>" in gen["text"]:
-        native_reasoning = gen["text"].split("</think>", 1)[0].replace("<think>", "").strip()
-        reasoning = native_reasoning or reasoning
+    reasoning = reasoning_of(gen["text"], obj)
     reasoning_ids = re.findall(r"\bE\d+\b", reasoning or "")
     gold = FEVER_LABEL[claim["label"]]
     pred = obj.get("verdict") if ok["verdict"] else None
@@ -427,13 +442,9 @@ def run(model_name, n, retrieval="bm25", chunk=20, adapter=None, output=None,
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if not claims:
         return path
-    system_prompt = {"direct": SYSTEM, "reasoning": REASONING_SYSTEM, "cot_sft": COT_SFT_SYSTEM,
-                     "cot_chain": COT_CHAIN_SYSTEM, "cot_brief": COT_BRIEF_SYSTEM,
-                     "cot_native": NATIVE_THINKING_SYSTEM}[prompt_style]
+    system_prompt = PROMPT_STYLES[prompt_style]
     if max_new_tokens is None:
-        max_new_tokens = {"direct": 160, "reasoning": 320, "cot_sft": 320,
-                          "cot_chain": 512, "cot_brief": 512,
-                          "cot_native": 1024}[prompt_style]
+        max_new_tokens = DEFAULT_MAX_NEW_TOKENS[prompt_style]
     if max_new_tokens <= 0:
         raise ValueError("max_new_tokens must be positive")
     if model_name.startswith("local"):

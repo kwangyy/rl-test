@@ -42,6 +42,12 @@ export function StepTimeline({ steps }: { steps: Step[] }) {
                                     </li>)}
                             </ol>
                         ) : null}
+                        {step.result.reasoning && (
+                            <details open>
+                                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Reasoning</summary>
+                                <p className="mt-1 whitespace-pre-line leading-relaxed">{step.result.reasoning}</p>
+                            </details>
+                        )}
                     </div>
                 </li>
             ))}
