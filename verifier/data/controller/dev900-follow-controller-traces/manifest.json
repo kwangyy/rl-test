@@ -1,0 +1,28 @@
+{
+ "description": "Dev 900 traces of the prompted loop (follow tools, 5895 verifier) under two controllers: qwen3.8-flash, and the 2B imitation controller trained on flash's train trajectories. Baselines for controller GRPO.",
+ "claim_ids": "verifier/data/eval/fever-dev-900-ids.json",
+ "verifier": "Qwen/Qwen3.5-2B+sft-direct-from-base-qwen3p5-2b-5895-samples_run1",
+ "tools": "follow",
+ "max_steps": 8,
+ "retrieval": "prompted-bm25-p5-k100",
+ "files": {
+  "flash-follow.jsonl.gz": {
+   "controller": "qwen/qwen3.8-flash",
+   "command": "python -m agent.prompted --tools follow --claim-ids verifier/data/eval/fever-dev-900-ids.json --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
+   "date": "2026-10-28",
+   "fever_score": 0.690,
+   "sha256": "9903c1d5b067cfdeab22416f468736a3ed968c6b9013c770a0a7d987a88b839b"
+  },
+  "local-imitation-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints",
+   "command": "python -m agent.prompted --tools follow --controller local:<run1 checkpoints> --claim-ids verifier/data/eval/fever-dev-900-ids.json --chunk 64 --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
+   "date": "2026-10-29",
+   "fever_score": 0.684,
+   "accuracy": 0.764,
+   "seconds_per_claim": 10.87,
+   "sha256": "7b70a714839dd0aa011acf47ec9254a09d211fd86e6f3649d412087008a8a537"
+  }
+ },
+ "format": "trace schema 3 (verifier/docs/trace-format.md)",
+ "license": "Derived from FEVER (CC BY-SA 3.0)"
+}

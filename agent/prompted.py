@@ -199,10 +199,12 @@ class Episode:
         return "\n".join(out)
 
 
-def decide(ep, big):
-    """Ask the controller for the next action; fall back to a safe default on bad output."""
+def decide(ep, big, g=None):
+    """Ask the controller for the next action; fall back to a safe default on bad output.
+    g is a reply already generated in a batch (a local controller), with its share of the seconds."""
     t0 = time.time()
-    g = big(SYSTEMS[ep.tools], ep.observation())
+    if g is None:
+        g = big(SYSTEMS[ep.tools], ep.observation())
     ep.ctl_calls += 1
     ep.ctl_in += g["in_tokens"]
     ep.ctl_out += g["out_tokens"]
@@ -223,7 +225,7 @@ def decide(ep, big):
                else {"action": "verify", "subclaim": None} if ep.claim_verdict is None
                else {"action": "commit"})
     ctl = {"text": g["text"], "valid": valid, "tokens_in": g["in_tokens"], "tokens_out": g["out_tokens"],
-           "seconds": round(time.time() - t0, 3)}
+           "seconds": round(g.get("seconds", time.time() - t0), 3)}
     return obj, ctl
 
 
@@ -249,7 +251,13 @@ def run_chunk(claims, search, verify, big, decomposer, run_info, workers=8, sear
         live = [ep for ep in live if ep.end is None]
         if not live:
             break
-        decisions = list(pool.map(lambda ep: decide(ep, big), live))
+        if hasattr(big, "batch"):  # local controller: one generate call for the chunk
+            t0 = time.time()
+            gs = big.batch([(SYSTEMS[ep.tools], ep.observation()) for ep in live])
+            s = (time.time() - t0) / len(live)
+            decisions = [decide(ep, big, {**g, "seconds": s}) for ep, g in zip(live, gs)]
+        else:
+            decisions = list(pool.map(lambda ep: decide(ep, big), live))
         act(live, decisions, search, verify, decomposer, pool, search_k)
     pool.shutdown()
     return [to_row(ep, run_info) for ep in eps]
@@ -456,7 +464,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=LOCAL_MODEL, help="verifier base model")
     ap.add_argument("--adapter", default=None, help="verifier LoRA dir(s), as eval_verifier.py --adapter")
-    ap.add_argument("--controller", default=BIG_MODEL)
+    ap.add_argument("--controller", default=BIG_MODEL,
+                    help="OpenRouter model, claude-* (Anthropic API), or local:<LoRA dir> for a trained controller")
     ap.add_argument("--n", type=int, help="default 900; ignored when --claim-ids is supplied")
     ap.add_argument("--claim-ids", help="frozen FEVER dev ID manifest")
     ap.add_argument("--train-n", type=int,
@@ -499,7 +508,9 @@ if __name__ == "__main__":
 
     run = "prompted-" + (adapter_label(a.adapter) if a.adapter else "base")
     # a non-default controller is named in the trace, so it never resumes another controller's file
-    ctl_tag = "" if a.controller == BIG_MODEL else "ctl-" + a.controller.split("/")[-1].replace(".", "p")
+    ctl_tag = ("" if a.controller == BIG_MODEL
+               else "ctl-local-" + adapter_label(a.controller[len("local:"):]) if a.controller.startswith("local:")
+               else "ctl-" + a.controller.split("/")[-1].replace(".", "p"))
     tag = "_".join(t for t in (a.tag, ctl_tag, "" if a.tools == "full" else a.tools) if t)
     run += f"_{tag}" if tag else ""
     search_tag = f"{a.method}-p{a.candidate_pages}-k{a.search_k}"
@@ -519,7 +530,10 @@ if __name__ == "__main__":
     print(f"{len(done)} done, {len(claims)} to go -> {path}")
     if claims:
         big = big_model(a.controller)
-        decomposer = Decomposer(big, cache_path(big.name, a.n, split=split, claim_ids=a.claim_ids))
+        # a local controller still decomposes with BIG_MODEL, so its sub-claims match flash's cache
+        dec_big = None if a.controller.startswith("local:") else big
+        decomposer = Decomposer(dec_big, cache_path(dec_big.name if dec_big else BIG_MODEL, a.n, split=split,
+                                                    claim_ids=a.claim_ids))
         search = FeverSearch(method=a.method, candidate_pages=a.candidate_pages)
         verify = LocalVerify(search, a.model, a.adapter)
         exa = None

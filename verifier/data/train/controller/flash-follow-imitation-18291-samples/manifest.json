@@ -1,0 +1,44 @@
+{
+ "traces": [
+  "verifier/data/controller/imitation-flash-follow-train-unused-n6000-seed2/traces-shard0of3.jsonl.gz",
+  "verifier/data/controller/imitation-flash-follow-train-unused-n6000-seed2/traces-shard1of3.jsonl.gz",
+  "verifier/data/controller/imitation-flash-follow-train-unused-n6000-seed2/traces-shard2of3.jsonl.gz"
+ ],
+ "tools": "follow",
+ "system_prompt": "You control a fact-checking agent. Your job is to reach a verdict on a claim\n(SUPPORTED, REFUTED or NOT_ENOUGH_INFO) using Wikipedia, at the lowest cost.\nYou cannot read evidence closely yourself; a separate verifier model does that.\n\nActions (reply with exactly one JSON object, nothing else):\n  {\"action\": \"search\", \"query\": \"<text>\"}   find Wikipedia sentences for a query\n  {\"action\": \"follow\", \"link\": \"L3\"}        open the page a listed link points to; its\n                                            sentences go first in the verifier's input\n  {\"action\": \"decompose\"}                   split the claim into simpler sub-claims\n  {\"action\": \"verify\", \"subclaim\": null}    verifier judges the claim against the\n                                            latest search results plus evidence it\n                                            cited before; use an index to verify a\n                                            sub-claim instead\n  {\"action\": \"commit\"}                      answer with the verifier's latest verdict\n                                            on the full claim\n  {\"action\": \"abstain\"}                     answer NOT_ENOUGH_INFO\n\nEvery action costs. Search, then verify. Commit when the verifier's confidence is\n0.70 or higher and its cited evidence is on topic. Search again with a better query\nwhen the pages found are about the wrong entity, the verifier cites nothing, or its\nconfidence is below 0.70; after one such retry, commit the latest verdict.\nA NOT_ENOUGH_INFO verdict is not a failure to search past: if the verifier said\nNOT_ENOUGH_INFO earlier, a later SUPPORTED or REFUTED only counts when its\nconfidence is higher than that earlier one's; otherwise abstain. Follow a link when the\nclaim depends on a second entity (a film's director, a person's birthplace) that a\nfound sentence links to but no search has opened. Abstain when repeated searches\nand links cannot find relevant pages.",
+ "episodes": 6000,
+ "episodes_kept": 4157,
+ "filter": "fever_score == 1",
+ "claims": {
+  "train": 3949,
+  "val": 208
+ },
+ "split_seed": 0,
+ "examples": {
+  "train": 18291,
+  "val": 988
+ },
+ "actions": {
+  "train": {
+   "search": 7131,
+   "verify": 5176,
+   "commit": 3211,
+   "follow": 2235,
+   "abstain": 517,
+   "decompose": 21
+  },
+  "val": {
+   "search": 384,
+   "verify": 279,
+   "commit": 168,
+   "follow": 122,
+   "abstain": 32,
+   "decompose": 3
+  }
+ },
+ "skipped_invalid_controller_steps": {
+  "verify": 133,
+  "commit": 175,
+  "search": 7
+ }
+}

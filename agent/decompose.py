@@ -125,8 +125,31 @@ class ClaudeModel:
                 "in_tokens": r.usage.input_tokens, "out_tokens": r.usage.output_tokens}
 
 
+class LocalController:
+    """A LoRA controller on the local GPU ("local:<adapter dir>"), e.g. one trained by imitation
+    of flash. BigModel's interface, plus batch() so a chunk's decisions run as one generate call."""
+
+    def __init__(self, adapter, max_tokens=64, base=None, batch_size=32):
+        from verifier.model import LOCAL_MODEL, LocalModel
+        self.m = LocalModel(base or LOCAL_MODEL, batch_size=batch_size, adapter=adapter, max_new_tokens=max_tokens)
+        self.name = "local:" + self.m.name
+
+    def __call__(self, system, user):
+        return self.batch([(system, user)])[0]
+
+    def batch(self, pairs):
+        systems = {s for s, _ in pairs}
+        if len(systems) != 1:
+            raise ValueError("one system prompt per batch")
+        self.m.system_prompt = systems.pop()
+        return [{"text": g["text"], "in_tokens": g["in_tokens"], "out_tokens": g["out_tokens"]}
+                for g in self.m.run([u for _, u in pairs])]
+
+
 def big_model(name=BIG_MODEL, max_tokens=200):
-    """ClaudeModel for claude-* names, otherwise BigModel on OpenRouter."""
+    """LocalController for local:<adapter>, ClaudeModel for claude-* names, otherwise BigModel on OpenRouter."""
+    if name.startswith("local:"):
+        return LocalController(name[len("local:"):])
     return (ClaudeModel if name.startswith("claude-") else BigModel)(name, max_tokens)
 
 
