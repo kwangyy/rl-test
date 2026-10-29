@@ -45,6 +45,10 @@ The earlier offline-RL controller study, over six cached actions:
 | `sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1` | The **verifier**. Qwen3.5-2B LoRA, direct SFT (no CoT, no GRPO) on 5,895 FEVER claims. Dev 900 alone: 0.761 accuracy, 0.671 FEVER. Every loop number here uses it. |
 | `sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1` | The **imitation controller**. Qwen3.5-2B LoRA, SFT on 18,291 flash decisions. No GRPO yet. |
 
+Both adapters are committed on this branch through Git LFS (section 4). The repository
+rule against committing checkpoints is waived for these two only, so the handover
+needs no file transfer.
+
 The README and TODO name `run2` of the verifier config as the main SFT checkpoint
 (0.741 / 0.659). The agent-loop work used **run1**. Use run1 so your baselines match.
 
@@ -52,12 +56,15 @@ The README and TODO name `run2` of the verifier config as the main SFT checkpoin
 
 1. `git switch controller/grpo-handover`, then `uv sync` (Python 3.13, CUDA 12.8).
 2. Download FEVER and build the BM25/SQLite index: [data.md](data.md) sections 1 and 2.
-3. Get the two adapters. Neither is in git (84 MB each); ask AG-2 for copies and put
-   them at the paths above, under `artifacts/checkpoints/`. Retraining is the
-   fallback: `verifier/experiments/<config>/train.py --run-name <new run>` (about
-   40 minutes for the verifier and 2.7 hours for the controller on a 16 GB RTX 5070
-   Ti). A retrain will not match the baselines exactly; if you retrain, re-run
-   them.
+3. Install Git LFS (`git lfs install`) before checking out, or run `git lfs pull`
+   afterwards. Both adapters are on this branch at the paths above, under
+   `artifacts/checkpoints/`, as `adapter_config.json` plus `adapter_model.safetensors`
+   (67 MB each, stored with LFS). The tokenizer loads from the base model.
+   sha256 of `adapter_model.safetensors`: verifier `f1c9a06c…cbcf67`, controller
+   `d297e118…5a245a0`. Retraining is the fallback:
+   `verifier/experiments/<config>/train.py --run-name <new run>` (about 40 minutes
+   for the verifier and 2.7 hours for the controller on a 16 GB RTX 5070 Ti), but a
+   retrain will not match the baselines exactly; if you retrain, re-run them.
 4. `OPENROUTER_API_KEY` in `.env` (git-ignored). The decomposer calls flash on any
    claim it has to split; the cache is not written back. Flash decomposed 39 of
    6,000 train claims, so the cost is negligible, but without a key those episodes
@@ -150,7 +157,7 @@ When the new verifier arrives:
 - Never train or fit anything on the dev 900, calibration or holdout IDs.
 - Never overwrite a run; use a new `--run-name`. Suggested config name:
   `grpo-controller-from-sftctl18291-qwen3p5-2b-<setting>-<count>-samples`.
-- Do not commit checkpoints, raw traces from `verifier/data/traces/`, credentials or
+- Do not commit new checkpoints (the two adapters above are the exception), raw traces from `verifier/data/traces/`, credentials or
   terminal logs. Gzip traces worth keeping, with a manifest, as in
   `verifier/data/controller/`.
 - Record results in [controller-imitation.md](controller-imitation.md) or a new doc,
