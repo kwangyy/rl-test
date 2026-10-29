@@ -1,0 +1,157 @@
+{
+ "description": "Dev 900 comparisons of the prompted loop: tool presets, controller model (Sonnet on 100 claims), and verifier (base, 5500 retrain). Fixed loop with 5895: verifier/data/traces/fever_dev_fixed-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_bm25-p5-k100_n900.jsonl (FEVER 0.666).",
+ "claim_ids": "verifier/data/eval/fever-dev-900-ids.json (Sonnet: dev100-ids.json, a subset)",
+ "max_steps": 8,
+ "retrieval": "prompted-bm25-p5-k100",
+ "command": "python -m agent.prompted [--tools <preset>] [--controller <model>] --claim-ids <ids> --adapter <verifier checkpoints>; fixed loop: python -m agent.agent_loop",
+ "fever_score_definition": "verdict correct and (gold NEI or a complete gold evidence set within the cited evidence)",
+ "files": {
+  "full.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "full",
+   "verifier": "5895/run1",
+   "n": 900,
+   "fever_score": 0.688,
+   "accuracy": 0.771,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 900,
+    "this_only": 35,
+    "other_only": 37,
+    "p": 0.906
+   },
+   "sha256": "cd1841bfcb512ed81b02d4d842d08ce8375f9427240b7fd68b36293224ccf1fe"
+  },
+  "follow": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_follow_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "follow",
+   "verifier": "5895/run1",
+   "n": 900,
+   "fever_score": 0.69,
+   "accuracy": 0.781,
+   "date": null,
+   "mcnemar": {
+    "vs": "fixed loop, 5895",
+    "n": 900,
+    "this_only": 67,
+    "other_only": 45,
+    "p": 0.047
+   },
+   "file": "../dev900-follow-controller-traces/flash-follow.jsonl.gz"
+  },
+  "pages.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_pages_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "pages",
+   "verifier": "5895/run1",
+   "n": 900,
+   "fever_score": 0.681,
+   "accuracy": 0.773,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 900,
+    "this_only": 27,
+    "other_only": 35,
+    "p": 0.374
+   },
+   "sha256": "3f3e3440852d095bfdf2c693fcd253353651cc53a5eeff61da1095c54338dc2a"
+  },
+  "nosearch.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_nosearch_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "nosearch",
+   "verifier": "5895/run1",
+   "n": 900,
+   "fever_score": 0.661,
+   "accuracy": 0.754,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 900,
+    "this_only": 45,
+    "other_only": 71,
+    "p": 0.02
+   },
+   "sha256": "cc48f7416d830e442561b5ededafbde43951d7d53fb1bee64ed64d32053cf1d7"
+  },
+  "prompted-base-verifier.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-base_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "full",
+   "verifier": "base Qwen3.5-2B",
+   "n": 900,
+   "fever_score": 0.407,
+   "accuracy": 0.501,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 900,
+    "this_only": 48,
+    "other_only": 303,
+    "p": 0.0
+   },
+   "sha256": "5fc8818d0eaafe77de0fb6e5dc1053858867cb81dc10993b8f7548a4f4443102"
+  },
+  "fixed-5500-verifier.jsonl.gz": {
+   "source_trace": "fever_dev_fixed-sft-direct-from-base-qwen3p5-2b-5500-samples_local-retrain1_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "none (fixed loop)",
+   "tools": "-",
+   "verifier": "5500/local-retrain1",
+   "n": 900,
+   "fever_score": 0.666,
+   "accuracy": 0.761,
+   "date": null,
+   "mcnemar": {
+    "vs": "prompted, 5500 verifier",
+    "n": 900,
+    "this_only": 40,
+    "other_only": 53,
+    "p": 0.213
+   },
+   "sha256": "974a123c49a79ed34c2b3fe3d355bde271f738950642e691cdb8efceefb404ba"
+  },
+  "prompted-5500-verifier.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5500-samples_local-retrain1_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl",
+   "controller": "flash",
+   "tools": "full",
+   "verifier": "5500/local-retrain1",
+   "n": 900,
+   "fever_score": 0.68,
+   "accuracy": 0.77,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 900,
+    "this_only": 55,
+    "other_only": 64,
+    "p": 0.463
+   },
+   "sha256": "48ab5bf167a5fdd35162a4869da1395805b3bcfa2c9b7e5b1e78e279f3d539c0"
+  },
+  "sonnet-follow-dev100.jsonl.gz": {
+   "source_trace": "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_ctl-claude-sonnet-5p5_follow_bm25-p5-k100_dev100-ids-6519eb85_n100.jsonl",
+   "controller": "claude-sonnet-5.5 (OpenRouter)",
+   "tools": "follow",
+   "verifier": "5895/run1",
+   "n": 100,
+   "fever_score": 0.7,
+   "accuracy": 0.76,
+   "date": null,
+   "mcnemar": {
+    "vs": "flash follow",
+    "n": 100,
+    "this_only": 4,
+    "other_only": 4,
+    "p": 1.0
+   },
+   "flash_follow_same_100": 0.7,
+   "sha256": "7c75f2bfd1c26c82639292329c1638119111062ea895a11f85aa96b0a29c91cc"
+  }
+ },
+ "format": "trace schema 3 (verifier/docs/trace-format.md)",
+ "license": "Derived from FEVER (CC BY-SA 3.0)"
+}

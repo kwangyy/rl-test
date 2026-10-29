@@ -120,5 +120,6 @@ OMP_NUM_THREADS=4 python -m agent.train_controller \
   --output verifier/evaluation/results/controller-offline/fever_score-run1.json
 ```
 
-The action cache (`verifier/data/controller/`, 16 MB) is not committed. The
-commands above rebuild it.
+The action caches are committed (`verifier/data/controller/train_unused-n1500-seed1/`
+and `dev_fever-dev-900-ids-ac9cfead/`, 16 MB). The commands above rebuild them; the
+`flash-bm25` actions need `OPENROUTER_API_KEY`.

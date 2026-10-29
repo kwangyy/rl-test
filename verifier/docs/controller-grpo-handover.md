@@ -29,13 +29,16 @@ significantly above the fixed loop (p = 0.08). Flash itself beats the fixed loop
 borderline margin (p = 0.047). It agrees with flash's action on 79%
 of 988 held-out steps; it is weakest on follow (45%) and abstain (41%).
 
-Expect modest gains. Apart from flash vs the fixed loop, the controller
-differences measured so far are within noise. Taking the better of flash and the 2B per claim would score 0.730, which
+Expect modest gains. Apart from flash vs the fixed loop, the controller and
+tool-preset differences measured so far are within noise
+([prompted-controller-comparisons.md](prompted-controller-comparisons.md)). Taking the better of flash and the 2B per claim would score 0.730, which
 gives a rough idea of the headroom. Most remaining errors are the verifier's: in
 the flash run the gold evidence reached the verifier on 556 of 600 SUPPORTED/REFUTED
 claims and 148 of those were still wrong.
 
 Details and the full tables: [controller-imitation.md](controller-imitation.md).
+Tool presets, a Sonnet controller and a second verifier:
+[prompted-controller-comparisons.md](prompted-controller-comparisons.md).
 The earlier offline-RL controller study, over six cached actions:
 [controller-offline-rl.md](controller-offline-rl.md).
 
@@ -98,6 +101,8 @@ committed traces to compare against are in
 | `verifier/data/controller/imitation-flash-follow-train-unused-n6000-seed2/` | 6,000 flash trajectories on unused train claims (FEVER 0.693; 4,157 FEVER-correct). |
 | `verifier/data/train/controller/flash-follow-imitation-18291-samples/` | The imitation set the controller was trained on. |
 | `verifier/data/controller/dev900-follow-controller-traces/` | Dev 900 traces for flash and the imitation controller. |
+| `verifier/data/controller/dev900-prompted-comparison-traces/` | Dev 900 traces for the other tool presets, the Sonnet controller and the 5500 verifier. |
+| `verifier/data/controller/{train_unused-n1500-seed1,dev_fever-dev-900-ids-ac9cfead}/` | Offline-RL action caches (`python -m agent.train_controller`). |
 
 ## 6. What to build
 
