@@ -25,11 +25,12 @@ actions per claim and the `5895/run1` verifier.
 | **2B imitation controller (start here)** | **0.684** | 0.764 | local, no API |
 
 The 2B is statistically tied with flash (exact McNemar p = 0.65) and not
-significantly above the fixed loop (p = 0.08). It agrees with flash's action on 79%
+significantly above the fixed loop (p = 0.08). Flash itself beats the fixed loop by a
+borderline margin (p = 0.047). It agrees with flash's action on 79%
 of 988 held-out steps; it is weakest on follow (45%) and abstain (41%).
 
-Expect modest gains. Every controller difference measured so far has been within
-noise. Taking the better of flash and the 2B per claim would score 0.730, which
+Expect modest gains. Apart from flash vs the fixed loop, the controller
+differences measured so far are within noise. Taking the better of flash and the 2B per claim would score 0.730, which
 gives a rough idea of the headroom. Most remaining errors are the verifier's: in
 the flash run the gold evidence reached the verifier on 556 of 600 SUPPORTED/REFUTED
 claims and 148 of those were still wrong.

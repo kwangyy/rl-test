@@ -86,9 +86,11 @@ loop, so it has no paired comparison here.
 
 ## 4. What this shows
 
-- The 2B copies flash well enough to tie it. It has not gone past flash, and flash
-  was not significantly better than the fixed loop either.
-- Every controller difference measured so far on dev 900 is inside noise. The
+- The 2B copies flash well enough to tie it, but has not gone past it. Flash with
+  follow beats the fixed loop by 2.4 points, a borderline result (67 / 45 claims,
+  p = 0.047, one of many comparisons); the 2B's 1.8 points are not significant
+  (p = 0.08).
+- Other differences between controllers are within noise. The
   verifier, not the controller, accounts for most errors: in the flash follow run the
   gold evidence reached the verifier on 556 of 600 SUPPORTED/REFUTED claims, and 148
   of those were still wrong.
