@@ -28,7 +28,7 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
 
     return (
         <section className="min-w-0 rounded-xl border bg-card shadow-sm" aria-label="Saved claims" aria-busy={loading}>
-            <div className="space-y-4 px-5 py-4">
+            <div className="space-y-3 p-5 pt-4">
                 <div className="flex items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold">Saved claims</h2>
                     <span className="text-sm text-muted-foreground">{claims.length} claims</span>
@@ -55,12 +55,13 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
             </div>
 
             <div className="overflow-x-auto scrollbar-nice">
-                <table className="w-full min-w-2xl text-left text-sm">
+                <table className="w-full min-w-xl text-left text-sm">
                     <caption className="sr-only">Saved claim results. Open a claim to inspect its complete trace.</caption>
                     <thead className="border-y bg-muted/50 text-xs text-muted-foreground">
                         <tr>
                             {["Claim", "Gold", "Verdict", "Confidence", "Outcome", "Steps"].map(label =>
-                                <th key={label} scope="col" className="px-4 py-3 font-medium">{label}</th>)}
+                                <th key={label} scope="col"
+                                    className="whitespace-nowrap px-2.5 py-2 font-medium">{label}</th>)}
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -73,19 +74,19 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
                                 const verdictTone = toneOf(claim.verdict);
                                 return (
                                     <tr key={String(claim.id)} onClick={() => !busy && onOpen(claim)}
-                                        className={`cursor-pointer align-top hover:bg-muted/50 ${selectedId === String(claim.id) ? "bg-muted/40" : ""}`}>
-                                        <td className="w-full px-4 py-3">
-                                            <button type="button" disabled={busy} aria-pressed={selectedId === String(claim.id)}
-                                                className="cursor-pointer text-left font-medium leading-relaxed hover:underline disabled:cursor-wait">
+                                        className={`cursor-pointer hover:bg-muted/50 ${selectedId === String(claim.id) ? "bg-muted/40" : ""}`}>
+                                        <td className="w-full max-w-0 px-2.5 py-2">
+                                            <button type="button" disabled={busy} aria-pressed={selectedId === String(claim.id)} title={claim.claim}
+                                                className="block w-full cursor-pointer truncate text-left font-medium hover:underline disabled:cursor-wait">
+                                                <span className="mr-2 inline-block rounded border bg-muted/40 px-1.5 align-[0.1em] font-mono text-[11px] font-normal tabular-nums text-muted-foreground">{claim.id}</span>
                                                 {claim.claim}
                                             </button>
-                                            <p className="mt-1 text-xs text-muted-foreground">ID {claim.id}</p>
                                         </td>
-                                        <td className={`px-4 py-3 capitalize ${goldTone.box} bg-transparent`}>{claim.gold == null ? "—" : pretty(claim.gold)}</td>
-                                        <td className={`px-4 py-3 capitalize ${verdictTone.box} bg-transparent`}>{pretty(claim.verdict)}</td>
-                                        <td className="px-4 py-3 tabular-nums">{claim.confidence == null ? "—" : `${(claim.confidence * 100).toFixed(1)}%`}</td>
-                                        <td className={`px-4 py-3 capitalize ${result === "correct" ? "text-emerald-700" : result === "incorrect" ? "text-rose-700" : "text-muted-foreground"}`}>{result}</td>
-                                        <td className="px-4 py-3 tabular-nums">{claim.n_steps}</td>
+                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${goldTone.box} bg-transparent`}>{claim.gold == null ? "—" : pretty(claim.gold)}</td>
+                                        <td className={`whitespace-nowrap px-2.5 py-2 capitalize ${verdictTone.box} bg-transparent`}>{pretty(claim.verdict)}</td>
+                                        <td className="whitespace-nowrap px-2.5 py-2 text-center tabular-nums">{claim.confidence == null ? "—" : `${(claim.confidence * 100).toFixed(1)}%`}</td>
+                                        <td className={`whitespace-nowrap px-2.5 py-2 text-center capitalize ${result === "correct" ? "text-emerald-700" : result === "incorrect" ? "text-rose-700" : "text-muted-foreground"}`}>{result}</td>
+                                        <td className="whitespace-nowrap px-2.5 py-2 text-center tabular-nums">{claim.n_steps}</td>
                                     </tr>
                                 );
                             })}

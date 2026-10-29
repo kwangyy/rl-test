@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { type Claim, type Health, type Mode, type Trace } from "../app"
 
 export const fieldClass =
-    "w-full rounded-lg resize-none leading-relaxed border bg-background px-3.5 py-2.5 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
+    "w-full rounded-lg resize-none leading-relaxed border bg-background px-3 py-2 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
 
 type Props = {
     health: Health | null; traces: Trace[]; claims: Claim[];
@@ -49,13 +49,13 @@ export function Select({
                 type="button"
                 disabled={disabled}
                 onClick={() => setOpen((o) => !o)}
-                className="flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-lg border bg-background px-3.5 py-2.5 text-left text-sm shadow-sm transition hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-lg border bg-background px-3 py-2 text-left text-sm shadow-sm transition hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <span className={`truncate ${selected ? "" : "text-muted-foreground"}`}>
                     {selected?.label ?? placeholder}
                 </span>
                 <svg
-                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+                    className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
                     viewBox="0 0 20 20"
                     fill="none"
                     stroke="currentColor"
@@ -91,7 +91,7 @@ export function Select({
 export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, setClaimId, mode, setMode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
     return (
         <form
-            className="min-w-0 space-y-4 rounded-xl p-6 shadow-sm border lg:sticky lg:top-8"
+            className="min-w-0 space-y-4 rounded-xl p-5 pt-4 shadow-sm border lg:sticky lg:top-8"
             onSubmit={(e) => { e.preventDefault(); onStart(); }}
         >
             <h2 className="text-sm font-medium">Mode</h2>
