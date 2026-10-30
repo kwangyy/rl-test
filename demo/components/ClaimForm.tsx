@@ -68,7 +68,7 @@ export function Select({
             </button>
 
             {open && (
-                <ul className="absolute z-20 scrollbar-nice mt-1.5 max-h-60 w-full overflow-auto rounded-lg border bg-background p-1 shadow-lg">
+                <ul className="absolute z-20 scrollbar-nice mt-0.5 max-h-60 w-full overflow-auto rounded-lg border bg-background p-1 shadow-lg">
                     {options.length === 0 && (
                         <li className="px-3 py-2 text-sm text-muted-foreground">Nothing to select</li>
                     )}
@@ -91,7 +91,7 @@ export function Select({
 export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, setClaimId, mode, setMode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
     return (
         <form
-            className="min-w-0 space-y-4 rounded-xl p-5 pt-4 shadow-sm border lg:sticky lg:top-8"
+            className="min-w-0 space-y-4 rounded-xl p-5 pt-4 shadow-sm border bg-card lg:sticky lg:top-8"
             onSubmit={(e) => { e.preventDefault(); onStart(); }}
         >
             <h2 className="text-sm font-medium">Mode</h2>
@@ -165,10 +165,12 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
             )}
 
             {mode !== "browse" && <button
-                className="w-full px-5 py-3 cursor-pointer rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 px-5 py-3 cursor-pointer rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!canRun}
             >
-                {busy ? "Running…" : mode === "replay" ? "Replay" : "Verify"}
+                {busy
+                    ? <><span className="size-3.5 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />Running…</>
+                    : mode === "replay" ? "Replay" : "Verify"}
             </button>}
         </form>
     );

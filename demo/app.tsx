@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ClaimForm } from "./components/ClaimForm";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { TraceTable } from "./components/TraceTable";
 import { VerificationResult } from "./components/VerificationResult";
 
@@ -39,10 +40,10 @@ const getJson = async <T,>(path: string): Promise<T> => {
 export const pretty = (s?: string | null) => s?.replaceAll("_", " ").toLowerCase() ?? "no valid verdict";
 
 const tones = {
-    good: { box: "bg-emerald-50 text-emerald-900 ring-emerald-200", dot: "bg-emerald-500 text-emerald-700" },
-    bad: { box: "bg-rose-50 text-rose-900 ring-rose-200", dot: "bg-rose-500 text-rose-700" },
-    unsure: { box: "bg-amber-50 text-amber-900 ring-amber-200", dot: "bg-amber-500 text-amber-700" },
-    none: { box: "bg-muted/50 text-muted-foreground ring-border/50", dot: "bg-muted-foreground/50 text-muted-foreground/50" },
+    good: { box: "bg-success/10 text-success ring-success/25", dot: "bg-success", mark: "bg-success", panel: "bg-success/7 text-success ring-success/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--success)_40%,transparent)]", icon: "✓" },
+    bad: { box: "bg-danger/10 text-danger ring-danger/25", dot: "bg-danger", mark: "bg-danger", panel: "bg-danger/7 text-danger ring-danger/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--danger)_40%,transparent)]", icon: "✕" },
+    unsure: { box: "bg-warning/10 text-warning ring-warning/25", dot: "bg-warning", mark: "bg-transparent ring-1 ring-inset ring-warning", panel: "bg-warning/7 text-warning ring-warning/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--warning)_40%,transparent)]", icon: "?" },
+    none: { box: "bg-muted/50 text-muted-foreground ring-border/50", dot: "bg-muted-foreground/50", mark: "bg-transparent ring-1 ring-inset ring-muted-foreground/60", panel: "bg-card text-muted-foreground ring-border", glow: "", icon: "-" },
 };
 export const toneOf = (v?: string | null) =>
     !v ? tones.none : /support/i.test(v) ? tones.good : /refut/i.test(v) ? tones.bad : tones.unsure;
@@ -171,10 +172,10 @@ function App() {
     const backendState = !health && !error ? "connecting" : !health ? "offline" : health.live ? "live" : "saved";
 
     const statusUI = {
-        connecting: { label: "Connecting…", dot: "bg-slate-400 animate-pulse" },
-        offline: { label: "Backend offline", dot: "bg-rose-500" },
-        live: { label: "Live", dot: "bg-emerald-500" },
-        saved: { label: "Saved traces only", dot: "bg-amber-500" },
+        connecting: { label: "Connecting…", dot: "bg-muted-foreground animate-pulse" },
+        offline: { label: "Backend offline", dot: "bg-danger" },
+        live: { label: "Live", dot: "bg-success" },
+        saved: { label: "Saved traces only", dot: "bg-warning" },
     }[backendState];
 
     const canRun = !busy && !!health && (mode === "live" ? !!input.trim() : !!claimId);
@@ -182,16 +183,19 @@ function App() {
     return (
         <div className="min-h-screen">
             <main className="p-4 lg:p-8">
-                <header className="mb-8 flex items-center justify-between gap-4">
+                <header className="mb-4 lg:mb-8 flex items-center justify-between gap-4">
                     <h1 className="text-3xl font-semibold tracking-tight">Fact verifier</h1>
-                    <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">
-                        <span className={`size-1.5 rounded-full ${statusUI.dot}`} />
-                        {statusUI.label}
-                    </span>
+                    <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">
+                            <span className={`size-1.5 rounded-full ${statusUI.dot}`} />
+                            {statusUI.label}
+                        </span>
+                        <ThemeToggle />
+                    </div>
                 </header>
 
                 {error && (
-                    <p role="alert" className="mb-6 px-5 py-4 rounded-xl bg-destructive/9 text-sm text-destructive/80 border">{error}</p>
+                    <p role="alert" className="mb-6 px-5 py-4 rounded-xl bg-danger/10 text-sm text-danger border">{error}</p>
                 )}
 
                 <div className="grid items-start gap-8 lg:grid-cols-[340px_1fr]">
