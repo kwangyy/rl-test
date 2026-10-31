@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getJson, pretty, toneOf, type Claim, type Row, type Trace } from "../app";
+import { controllerLabel, getJson, pretty, toneOf, type Claim, type Row, type Trace } from "../app";
 import { fieldClass, Select } from "./ClaimForm";
 import { StepTimeline } from "./StepTimeline";
 
@@ -83,6 +83,7 @@ function RunPanel({ tag, name, row }: { tag: "A" | "B"; name: string; row: Row }
                         </span>
                     )}
                 </div>
+                {controllerLabel(row.run) && <p className="mt-1 truncate text-xs opacity-70" title={row.run?.controller}>Controller: {controllerLabel(row.run)}</p>}
                 <p className="mt-2 text-sm opacity-70 tabular-nums">
                     {row.final.confidence == null ? "no confidence" : `${(row.final.confidence * 100).toFixed(1)}% confidence`}
                 </p>
@@ -135,7 +136,7 @@ function Detail({ pair, nameA, nameB, onBack }: { pair: Pair; nameA: string; nam
         return () => { stale = true; };
     }, [pair.id, nameA, nameB]);
 
-    const mismatch = rows && rows.a.run?.policy !== rows.b.run?.policy;
+    const mismatch = rows && (rows.a.run?.policy !== rows.b.run?.policy || rows.a.run?.controller !== rows.b.run?.controller || rows.a.run?.tools !== rows.b.run?.tools);
     return (
         <div className="min-w-0 space-y-5">
             <button type="button" onClick={onBack} className="cursor-pointer text-sm font-medium">← Back</button>
@@ -147,7 +148,7 @@ function Detail({ pair, nameA, nameB, onBack }: { pair: Pair; nameA: string; nam
             {error && <p role="alert" className="rounded-xl border bg-danger/10 px-5 py-4 text-sm text-danger">{error}</p>}
             {mismatch && (
                 <p className="rounded-lg bg-warning/10 px-4 py-2 text-sm text-warning ring-1 ring-warning/25">
-                    These runs use different policies ({rows.a.run?.policy ?? "?"} vs {rows.b.run?.policy ?? "?"}), so cost and steps are not like for like.
+                    These runs use different controllers ({controllerLabel(rows.a.run) ?? rows.a.run?.policy ?? "?"} vs {controllerLabel(rows.b.run) ?? rows.b.run?.policy ?? "?"}), so cost and steps are not like for like.
                 </p>
             )}
             {!rows && !error && <p className="py-10 text-center text-sm text-muted-foreground">Loading both traces…</p>}

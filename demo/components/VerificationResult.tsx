@@ -1,4 +1,4 @@
-import { pretty, toneOf, type Row, type Step } from "../app";
+import { controllerLabel, pretty, toneOf, type Row, type Step } from "../app";
 import { StepTimeline } from "./StepTimeline";
 import { useEffect, useState } from "react";
 
@@ -92,7 +92,9 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
                                 <div className="flex items-center gap-5">
                                     <ConfidenceRing confidence={row.final.confidence} icon={t.icon} />
                                     <div className="min-w-0">
-                                        <span className="eyebrow">Verdict</span>
+                                        <span className="eyebrow" title={row.run?.controller}>
+                                            Verdict{controllerLabel(row.run) && <> · {controllerLabel(row.run)}</>}
+                                        </span>
                                         <p className="font-serif text-6xl font-semibold capitalize leading-tight tracking-tight">
                                             {pretty(row.final.verdict)}
                                         </p>

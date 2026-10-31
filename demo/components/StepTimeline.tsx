@@ -37,10 +37,29 @@ const ForkIcon = (
     </svg>
 );
 
+const LinkIcon = (
+    <svg {...svgProps}>
+        <path d="M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-1 1" />
+        <path d="M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l1-1" />
+    </svg>
+);
+
+const PageIcon = (
+    <svg {...svgProps}>
+        <path d="M5.5 2.5h6l3 3v12h-9z" />
+        <path d="M11.5 2.5v3h3" />
+    </svg>
+);
+
+const link = "bg-primary/10 text-primary ring-primary/30";
 const actionStyles: Record<string, { icon: ReactNode; num: string }> = {
     search: { icon: SearchIcon, num: "bg-primary/10 text-primary ring-primary/30" },
     decompose: { icon: ForkIcon, num: "bg-warning/10 text-warning ring-warning/30" },
     verify: { icon: "✓", num: "bg-success/10 text-success ring-success/30" },
+    follow: { icon: LinkIcon, num: link },
+    open_page: { icon: PageIcon, num: link },
+    find_pages: { icon: SearchIcon, num: link },
+    web_pages: { icon: SearchIcon, num: link },
     commit: { icon: "⚑", num: "bg-success/10 text-success ring-success/30" },
     abstain: { icon: "∅", num: "bg-muted text-muted-foreground ring-border" },
 };
@@ -51,6 +70,9 @@ export function StepTimeline({ steps, cited, busy }: { steps: Step[]; cited: Set
         <ol className="relative space-y-3">
             {steps.map((step) => {
                 const style = actionStyles[step.action] ?? fallbackStyle;
+                // what the step acted on: a query, a page title, or the page a followed link opened
+                const target = step.args.query ?? step.args.title ?? step.args.page ?? step.args.target;
+                const empty = step.result.status && step.result.status !== "ok" && !step.result.hits?.length && !step.result.pages?.length;
                 return (
                     <li key={step.t} className="relative pl-10" style={{ animation: "step-in 300ms ease-out" }}>
                         <span className={`absolute left-0 top-1 z-10 grid size-7 place-items-center rounded-full text-sm font-semibold ring-1 ${style.num}`}>
@@ -63,12 +85,20 @@ export function StepTimeline({ steps, cited, busy }: { steps: Step[]; cited: Set
                                     {step.action}
                                 </h3>
                                 {"verdict" in step.result && <VerdictBadge verdict={step.result.verdict} />}
-                                {step.args.query &&
-                                    <p title={step.args.query} className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground/80">{step.args.query}</p>}
-                                <span className={`${step.args.query ? "" : "ml-auto "}flex shrink-0 items-center gap-2 text-xs tabular-nums`}>
+                                {target &&
+                                    <p title={target} className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground/80">{target}</p>}
+                                <span className={`${target ? "" : "ml-auto "}flex shrink-0 items-center gap-2 text-xs tabular-nums`}>
                                     <span className="whitespace-nowrap">{step.seconds.toFixed(2)}s</span>
                                 </span>
                             </div>
+                            {step.result.pages?.length ? (
+                                <ul className="flex flex-wrap gap-1.5">
+                                    {step.result.pages.map((p) => (
+                                        <li key={p} className="rounded-md bg-muted px-2 py-0.5 text-xs text-foreground/80">{pretty(p)}</li>
+                                    ))}
+                                </ul>
+                            ) : null}
+                            {empty && <p className="text-xs">{step.result.status!.replaceAll("_", " ")}</p>}
                             {step.result.hits?.length ? (
                                 <details className="group">
                                     <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium [&::-webkit-details-marker]:hidden">

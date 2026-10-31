@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { type Claim, type Health, type Mode, type Trace } from "../app"
+import { policyLabel, type Claim, type Health, type Mode, type Trace } from "../app"
 
 export const fieldClass =
     "w-full rounded-lg resize-none leading-relaxed border bg-background px-3 py-2 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
@@ -181,7 +181,7 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
                             disabled={busy}
                             options={(health?.policies ?? []).map((p) => ({
                                 value: p,
-                                label: p === "fixed" ? "Fixed: search, then verify" : "Prompted: agent chooses steps",
+                                label: policyLabel(p),
                             }))}
                         />
                     </div>

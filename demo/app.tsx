@@ -23,14 +23,14 @@ export type Hit = { page: string; line: number; text: string };
 export type Step = {
     t: number;
     action: string;
-    args: { query?: string };
-    result: { hits?: Hit[]; verdict?: string | null; subclaims?: string[]; reasoning?: string | null };
+    args: { query?: string; title?: string; target?: string; link?: string; page?: string | null };
+    result: { hits?: Hit[]; verdict?: string | null; subclaims?: string[]; reasoning?: string | null; status?: string; pages?: string[] };
     seconds: number;
 };
 export type Row = {
     claim: string;
     gold?: string | null;
-    run?: { policy?: string; verifier?: string };
+    run?: { policy?: string; verifier?: string; controller?: string; tools?: string };
     cost?: { n_ops?: number; tokens_in?: number; tokens_out?: number; seconds?: number };
     steps: Step[];
     final: { verdict: string | null; evidence: string[]; confidence: number | null };
@@ -41,6 +41,19 @@ export const getJson = async <T,>(path: string): Promise<T> => {
     if (!res.ok) throw new Error((await res.json()).detail ?? "Request failed.");
     return res.json();
 };
+
+/** "prompted-bm25" -> "Prompted" etc. Unknown policies fall back to their raw name. */
+export const policyLabel = (p: string) =>
+    p.startsWith("fixed") ? "Fixed: search, then verify"
+    : p.startsWith("prompted") ? "Prompted: agent chooses steps"
+    : `${p.replaceAll(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase())}: agent chooses steps`;
+
+/** Short model name for display: drop the org prefix and any path. */
+export const shortModel = (s?: string) => s?.split("/").filter(Boolean).pop();
+
+/** The controller (and tool preset) behind a run, or null for the fixed loop. */
+export const controllerLabel = (run?: Row["run"]) =>
+    run?.controller ? `${shortModel(run.controller)}${run.tools && run.tools !== "full" ? ` · ${run.tools} tools` : ""}` : null;
 
 export const pretty = (s?: string | null) => s?.replaceAll("_", " ").toLowerCase() ?? "no valid verdict";
 
