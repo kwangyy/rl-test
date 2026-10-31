@@ -130,6 +130,11 @@
     @apply border-border outline-ring/50;
   }
 
+  /* Reserve the scrollbar's width so the page doesn't shift when filters make it appear or disappear. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
   body {
     @apply bg-background font-sans text-foreground antialiased;
   }
@@ -185,26 +190,32 @@
     }
 }
 
-.scrollbar-nice {
-	/* Firefox fallback */
+.scrollbar-nice,
+html {
+	/* Firefox fallback; html covers the page's own scrollbar */
 	scrollbar-width: thin;
 	scrollbar-color: var(--border) transparent;
 }
 
 @supports selector(::-webkit-scrollbar) {
-	.scrollbar-nice {
+	.scrollbar-nice,
+	html {
 		scrollbar-width: auto;
 		scrollbar-color: auto;
 	}
-	.scrollbar-nice::-webkit-scrollbar {
+	.scrollbar-nice::-webkit-scrollbar,
+	html::-webkit-scrollbar {
 		width: 10px;
 		height: 10px;
 	}
 	.scrollbar-nice::-webkit-scrollbar-track,
-	.scrollbar-nice::-webkit-scrollbar-corner {
+	.scrollbar-nice::-webkit-scrollbar-corner,
+	html::-webkit-scrollbar-track,
+	html::-webkit-scrollbar-corner {
 		background: transparent;
 	}
-	.scrollbar-nice::-webkit-scrollbar-thumb {
+	.scrollbar-nice::-webkit-scrollbar-thumb,
+	html::-webkit-scrollbar-thumb {
 		background-color: var(--border);
 		border: 2px solid transparent;
 		background-clip: content-box;

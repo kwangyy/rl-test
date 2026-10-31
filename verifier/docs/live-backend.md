@@ -36,7 +36,7 @@ event format, so the frontend draws a live run and a saved run the same way.
 
 The `demo/` frontend provides saved-trace browsing, replay, live claims,
 a step timeline and expandable evidence with final citations marked. Browse loads complete traces on demand; Replay streams their recorded
-steps. Matched-claim comparison remains future work.
+steps. Compare reads two saved traces through the same summary and row endpoints and joins them by claim ID.
 
 ### 2.2 Run it
 

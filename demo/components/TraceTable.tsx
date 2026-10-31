@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { pretty, toneOf, type Claim } from "../app";
+import { pretty, toneOf, type Claim, type Trace } from "../app";
 import { fieldClass, Select } from "./ClaimForm";
 
 type Outcome = "correct" | "incorrect" | "invalid" | "unscored";
@@ -8,12 +8,15 @@ const outcomeOf = (claim: Claim): Outcome =>
 const pageSize = 25;
 const outcomeMark: Record<Outcome, { icon: string; cls: string }> = {
     correct: { icon: "✓", cls: "text-success" },
-    incorrect: { icon: "✕", cls: "text-danger" },
+    incorrect: { icon: "✗", cls: "text-danger" },
     invalid: { icon: "!", cls: "text-warning" },
     unscored: { icon: "-", cls: "text-muted-foreground" },
 };
 
-export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
+export function TraceTable({ traces, trace, setTrace, claims, loading, busy, selectedId, onOpen }: {
+    traces: Trace[];
+    trace: string;
+    setTrace: (v: string) => void;
     claims: Claim[];
     loading: boolean;
     busy: boolean;
@@ -51,8 +54,14 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
                         <div className="bg-warning" style={{ width: `${(counts.invalid / claims.length) * 100}%` }} />
                     </div>
                 )}
-                <div className="flex gap-3">
-                    <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm font-medium">
+                <div className="flex flex-wrap gap-3">
+                    <div className="flex min-w-0 basis-full flex-col gap-1.5 text-sm font-medium lg:basis-0 lg:flex-[2_1_20rem]">
+                        Experiment
+                        <Select middle value={trace} onChange={setTrace} disabled={busy || !traces.length}
+                            placeholder="No saved traces available"
+                            options={traces.map(t => ({ value: t.name, label: t.name.replace(/\.jsonl$/, "") }))} />
+                    </div>
+                    <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm font-medium lg:flex-[1_1_12rem]">
                         Search
                         <input type="search" className={fieldClass} value={query} placeholder="Claim text or ID"
                             onChange={event => { setQuery(event.target.value); setPage(0); }} />
@@ -116,16 +125,16 @@ export function TraceTable({ claims, loading, busy, selectedId, onOpen }: {
                 </table>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t p-5 text-sm">
                 <p className="text-muted-foreground" aria-live="polite">
                     {filtered.length ? `${offset + 1}-${Math.min(offset + pageSize, filtered.length)} of ${filtered.length} claims` : "0 claims"}
                 </p>
                 <div className="flex items-center gap-3">
                     <button type="button" disabled={loading || currentPage === 0} onClick={() => setPage(currentPage - 1)}
-                        className="cursor-pointer rounded-lg border px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                        className="cursor-pointer rounded-md border px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                     <span className="text-xs text-muted-foreground">{currentPage + 1} / {pages}</span>
                     <button type="button" disabled={loading || currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}
-                        className="cursor-pointer rounded-lg border px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                        className="cursor-pointer rounded-md border px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
                 </div>
             </div>
         </section>

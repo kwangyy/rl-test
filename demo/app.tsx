@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ClaimForm } from "./components/ClaimForm";
+import { ClaimForm, ModeTabs } from "./components/ClaimForm";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { TraceTable } from "./components/TraceTable";
+import { Compare } from "./components/Compare";
 import { VerificationResult } from "./components/VerificationResult";
 
 export type Health = { live: boolean; policies: string[] };
@@ -15,8 +16,9 @@ export type Claim = {
     confidence: number | null;
     correct: boolean;
     n_steps: number;
+    n_ops?: number;
 };
-export type Mode = "browse" | "replay" | "live";
+export type Mode = "browse" | "replay" | "live" | "compare";
 export type Hit = { page: string; line: number; text: string };
 export type Step = {
     t: number;
@@ -27,11 +29,14 @@ export type Step = {
 };
 export type Row = {
     claim: string;
+    gold?: string | null;
+    run?: { policy?: string; verifier?: string };
+    cost?: { n_ops?: number; tokens_in?: number; tokens_out?: number; seconds?: number };
     steps: Step[];
     final: { verdict: string | null; evidence: string[]; confidence: number | null };
 };
 
-const getJson = async <T,>(path: string): Promise<T> => {
+export const getJson = async <T,>(path: string): Promise<T> => {
     const res = await fetch(path);
     if (!res.ok) throw new Error((await res.json()).detail ?? "Request failed.");
     return res.json();
@@ -41,7 +46,7 @@ export const pretty = (s?: string | null) => s?.replaceAll("_", " ").toLowerCase
 
 const tones = {
     good: { box: "bg-success/10 text-success ring-success/25", dot: "bg-success", mark: "bg-success", panel: "bg-success/7 text-success ring-success/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--success)_40%,transparent)]", icon: "✓" },
-    bad: { box: "bg-danger/10 text-danger ring-danger/25", dot: "bg-danger", mark: "bg-danger", panel: "bg-danger/7 text-danger ring-danger/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--danger)_40%,transparent)]", icon: "✕" },
+    bad: { box: "bg-danger/10 text-danger ring-danger/25", dot: "bg-danger", mark: "bg-danger", panel: "bg-danger/7 text-danger ring-danger/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--danger)_40%,transparent)]", icon: "✗" },
     unsure: { box: "bg-warning/10 text-warning ring-warning/25", dot: "bg-warning", mark: "bg-transparent ring-1 ring-inset ring-warning", panel: "bg-warning/7 text-warning ring-warning/30", glow: "shadow-[0_0_24px_-4px_color-mix(in_srgb,var(--warning)_40%,transparent)]", icon: "?" },
     none: { box: "bg-muted/50 text-muted-foreground ring-border/50", dot: "bg-muted-foreground/50", mark: "bg-transparent ring-1 ring-inset ring-muted-foreground/60", panel: "bg-card text-muted-foreground ring-border", glow: "", icon: "-" },
 };
@@ -55,6 +60,9 @@ function App() {
     const [loadingClaims, setLoadingClaims] = useState(false);
     const [browseDetail, setBrowseDetail] = useState(false);
     const [trace, setTrace] = useState("");
+    const [traceB, setTraceB] = useState("");
+    const [claimsB, setClaimsB] = useState<Claim[]>([]);
+    const [loadingB, setLoadingB] = useState(false);
     const [claimId, setClaimId] = useState("");
     const [mode, setMode] = useState<Mode>("browse");
     const [input, setInput] = useState("");
@@ -70,7 +78,7 @@ function App() {
 
     useEffect(() => {
         Promise.all([getJson<Health>("/api/health"), getJson<Trace[]>("/api/traces")])
-            .then(([h, t]) => { setHealth(h); setTraces(t); setTrace(t[0]?.name ?? ""); })
+            .then(([h, t]) => { setHealth(h); setTraces(t); setTrace(t[0]?.name ?? ""); setTraceB(t[1]?.name ?? ""); })
             .catch((e: Error) => setError(e.message));
         return () => source.current?.close();
     }, []);
@@ -95,6 +103,19 @@ function App() {
             .finally(() => !stale && setLoadingClaims(false));
         return () => { stale = true; };
     }, [trace]);
+
+    // Compare's second run: only its summary list is needed, nothing else resets.
+    useEffect(() => {
+        if (!traceB) return;
+        let stale = false;
+        setClaimsB([]);
+        setLoadingB(true);
+        getJson<{ items: Claim[] }>(`/api/traces/${encodeURIComponent(traceB)}?limit=10000`)
+            .then(({ items }) => !stale && setClaimsB(items))
+            .catch((e: Error) => !stale && setError(e.message))
+            .finally(() => !stale && setLoadingB(false));
+        return () => { stale = true; };
+    }, [traceB]);
 
     useEffect(() => { setBrowseDetail(false); }, [mode]);
 
@@ -178,13 +199,17 @@ function App() {
         saved: { label: "Saved traces only", dot: "bg-warning" },
     }[backendState];
 
+    const showForm = mode === "replay" || mode === "live";
     const canRun = !busy && !!health && (mode === "live" ? !!input.trim() : !!claimId);
 
     return (
         <div className="min-h-screen">
             <main className="p-4 lg:p-8">
-                <header className="mb-4 lg:mb-8 flex items-center justify-between gap-4">
+                <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 lg:mb-8">
                     <h1 className="text-3xl font-semibold tracking-tight">Fact verifier</h1>
+                    <div className="order-last w-full lg:order-0 lg:w-96">
+                        <ModeTabs mode={mode} setMode={setMode} busy={busy} liveAvailable={!!health?.live} />
+                    </div>
                     <div className="flex items-center gap-3">
                         <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">
                             <span className={`size-1.5 rounded-full ${statusUI.dot}`} />
@@ -198,8 +223,8 @@ function App() {
                     <p role="alert" className="mb-6 px-5 py-4 rounded-xl bg-danger/10 text-sm text-danger border">{error}</p>
                 )}
 
-                <div className="grid items-start gap-8 lg:grid-cols-[340px_1fr]">
-                    <ClaimForm
+                <div className={`grid items-start gap-8 ${showForm ? "lg:grid-cols-[340px_1fr]" : ""}`}>
+                    {showForm && <ClaimForm
                         health={health}
                         traces={traces}
                         claims={claims}
@@ -208,7 +233,6 @@ function App() {
                         claimId={claimId}
                         setClaimId={setClaimId}
                         mode={mode}
-                        setMode={setMode}
                         input={input}
                         setInput={setInput}
                         policy={policy}
@@ -216,11 +240,15 @@ function App() {
                         busy={busy}
                         canRun={canRun}
                         onStart={start}
-                    />
-                    {mode === "browse" ? (
+                    />}
+                    {mode === "compare" ? (
+                        <Compare key={`${trace}|${traceB}`} traces={traces} nameA={trace} nameB={traceB}
+                            setNameA={setTrace} setNameB={setTraceB}
+                            claimsA={claims} claimsB={claimsB} loading={loadingClaims || loadingB} />
+                    ) : mode === "browse" ? (
                         <div className="min-w-0 space-y-5">
                             <div hidden={browseDetail}>
-                                <TraceTable key={trace} claims={claims} loading={loadingClaims} busy={busy}
+                                <TraceTable key={trace} traces={traces} trace={trace} setTrace={setTrace} claims={claims} loading={loadingClaims} busy={busy}
                                     selectedId={claimId} onOpen={(selected) => { void start(String(selected.id)); }} />
                             </div>
                             {browseDetail && <>
