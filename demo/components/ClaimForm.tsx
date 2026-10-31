@@ -106,7 +106,12 @@ export function ModeTabs({ mode, setMode, busy, liveAvailable }: {
     mode: Mode; setMode: (v: Mode) => void; busy: boolean; liveAvailable: boolean;
 }) {
     return (
-        <nav aria-label="Mode" className="grid grid-cols-4 gap-1 rounded-lg bg-secondary p-1">
+        <nav aria-label="Mode" className="relative grid grid-cols-4 rounded-lg bg-secondary p-1">
+            <span
+                aria-hidden
+                className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/4)] rounded-md bg-background shadow-sm transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(${modes.indexOf(mode) * 100}%)` }}
+            />
             {modes.map((m) => (
                 <button
                     key={m}
@@ -114,7 +119,7 @@ export function ModeTabs({ mode, setMode, busy, liveAvailable }: {
                     disabled={busy || (m === "live" && !liveAvailable)}
                     aria-pressed={mode === m}
                     onClick={() => setMode(m)}
-                    className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${mode === m ? "bg-background shadow-sm" : "text-foreground/60 hover:text-foreground"}`}
+                    className={`relative z-10 rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${mode === m ? "" : "text-foreground/60 hover:text-foreground"}`}
                 >
                     {m}
                 </button>
@@ -126,7 +131,7 @@ export function ModeTabs({ mode, setMode, busy, liveAvailable }: {
 export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, setClaimId, mode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
     return (
         <form
-            className="min-w-0 space-y-4 rounded-xl p-5 pt-4 shadow-sm border bg-card lg:sticky lg:top-8"
+            className="min-w-0 space-y-4 card-raised rounded-xl p-5 pt-4 border bg-card lg:sticky lg:top-8"
             onSubmit={(e) => { e.preventDefault(); onStart(); }}
         >
             {mode !== "live" ? (

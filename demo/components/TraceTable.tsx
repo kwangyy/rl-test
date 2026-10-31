@@ -39,7 +39,7 @@ export function TraceTable({ traces, trace, setTrace, claims, loading, busy, sel
     const visible = filtered.slice(offset, offset + pageSize);
 
     return (
-        <section className="min-w-0 rounded-xl border bg-card shadow-sm" aria-label="Saved claims" aria-busy={loading}>
+        <section className="min-w-0 card-raised rounded-xl border bg-card" aria-label="Saved claims" aria-busy={loading}>
             <div className="space-y-3 p-5 pt-4">
                 <div className="flex items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold">Saved claims</h2>

@@ -206,7 +206,9 @@ function App() {
         <div className="min-h-screen">
             <main className="p-4 lg:p-8">
                 <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 lg:mb-8">
-                    <h1 className="text-3xl font-semibold tracking-tight">Fact verifier</h1>
+                    <h1 className="flex items-center gap-3 font-serif text-4xl font-semibold tracking-tight">
+                        Fact verifier
+                    </h1>
                     <div className="order-last w-full lg:order-0 lg:w-96">
                         <ModeTabs mode={mode} setMode={setMode} busy={busy} liveAvailable={!!health?.live} />
                     </div>

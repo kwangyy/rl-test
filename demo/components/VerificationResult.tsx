@@ -31,36 +31,20 @@ function useCountUp(target: number, duration = 800) {
     return value;
 }
 
-function ConfidenceBar({ confidence, dot }: { confidence: number; dot: string; }) {
-    const target = confidence * 100;
-    const animated = useCountUp(target);
-
+function ConfidenceRing({ confidence, icon }: { confidence: number | null; icon: string }) {
+    const animated = useCountUp(confidence == null ? 0 : confidence * 100);
+    const r = 34, c = 2 * Math.PI * r;
     return (
-        <div className="mt-3 max-w-lg">
-            <div className="mb-2 flex justify-between text-xs opacity-70">
-                <span>Confidence</span>
-                <span className="tabular-nums">
-                    {animated.toFixed(1)}%
-                </span>
-            </div>
-
-            <div className="relative h-2.5 overflow-hidden rounded-full bg-foreground/10">
-                <div
-                    className={`h-full rounded-full ${dot}`}
-                    style={{
-                        width: `${animated}%`,
-                    }}
-                />
-                {[25, 50, 75].map((tick) => (
-                    <span key={tick} className="absolute inset-y-0 w-px bg-background/70" style={{ left: `${tick}%` }} />
-                ))}
-            </div>
-            <div className="relative mt-1 h-3 text-[10px] tabular-nums opacity-50">
-                {[0, 25, 50, 75, 100].map((tick) => (
-                    <span key={tick} className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full" style={{ left: `${tick}%` }}>{tick}</span>
-                ))}
-            </div>
-        </div>
+        <span className="relative grid size-20 shrink-0 place-items-center">
+            <svg viewBox="0 0 80 80" className="absolute inset-0 -rotate-90" fill="none" aria-hidden>
+                <circle cx="40" cy="40" r={r} stroke="currentColor" strokeOpacity="0.15" strokeWidth="5" />
+                {confidence != null && (
+                    <circle cx="40" cy="40" r={r} stroke="currentColor" strokeWidth="5" strokeLinecap="round"
+                        strokeDasharray={c} strokeDashoffset={c * (1 - animated / 100)} />
+                )}
+            </svg>
+            <span className="font-serif text-3xl font-semibold leading-none">{icon}</span>
+        </span>
     );
 }
 
@@ -85,7 +69,7 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
         <section className="min-w-0 space-y-6" aria-busy={busy}>
             {!claim ? (
                 <div className="rounded-xl border border-dashed px-8 py-20 text-center">
-                    <h2 className="font-serif text-2xl">Nothing checked yet</h2>
+                    <h2 className="font-serif text-3xl">Nothing checked yet</h2>
                     <p className="mx-auto mt-3 max-w-sm text-sm text-foreground/60">
                         Choose a claim and run it. The agent's searches, the sentences it found and the sources behind the verdict will show up here.
                     </p>
@@ -106,22 +90,17 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
                         {row ? (
                             <>
                                 <div className="flex items-center gap-5">
-                                    <span className="grid size-16 shrink-0 place-items-center rounded-full bg-current/12 ring-1 ring-current/30">
-                                        <span className="text-3xl font-semibold leading-none">{t.icon}</span>
-                                    </span>
+                                    <ConfidenceRing confidence={row.final.confidence} icon={t.icon} />
                                     <div className="min-w-0">
-                                        <span className="text-xs font-medium uppercase tracking-widest opacity-70">Verdict</span>
-                                        <p className="text-5xl font-semibold capitalize leading-tight tracking-tight">
+                                        <span className="eyebrow">Verdict</span>
+                                        <p className="font-serif text-6xl font-semibold capitalize leading-tight tracking-tight">
                                             {pretty(row.final.verdict)}
                                         </p>
+                                        {row.final.confidence != null && (
+                                            <p className="mt-1 text-sm tabular-nums opacity-70">{(row.final.confidence * 100).toFixed(1)}% confidence</p>
+                                        )}
                                     </div>
                                 </div>
-                                {row.final.confidence != null && (
-                                    <ConfidenceBar
-                                        confidence={row.final.confidence}
-                                        dot={t.dot}
-                                    />
-                                )}
                                 {citedIds.length > 0 && (
                                     <ul className="mt-5 space-y-3 border-t border-current/15 pt-4 text-foreground">
                                         {citedIds.map((id) => {
@@ -141,26 +120,19 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
                         ) : (
                             <div>
                                 <div className="flex items-center gap-5">
-                                    <Shimmer className="grid size-16 shrink-0 place-items-center rounded-full">
+                                    <Shimmer className="grid size-20 shrink-0 place-items-center rounded-full">
                                         <span className="relative size-5 animate-spin rounded-full border-2 border-foreground/15 border-t-foreground/60" />
                                     </Shimmer>
                                     <div className="min-w-0">
-                                        <span className="text-xs font-medium uppercase tracking-widest opacity-70" role="status">{status}</span>
-                                        {/* same 60px slot as the verdict's text-5xl leading-tight line */}
-                                        <div className="flex h-15 items-center">
-                                            <Shimmer className="h-10 w-56 rounded-md" />
+                                        <span className="eyebrow" role="status">{status}</span>
+                                        {/* same slots as the verdict word (text-6xl leading-tight = 75px) and the confidence line (mt-1 + text-sm = 24px) */}
+                                        <div className="flex h-18.75 items-center">
+                                            <Shimmer className="h-12 w-64 rounded-md" />
+                                        </div>
+                                        <div className="mt-1 flex h-5 items-center">
+                                            <Shimmer className="h-3 w-32 rounded" />
                                         </div>
                                     </div>
-                                </div>
-                                <div className="mt-3 max-w-lg">
-                                    <div className="mb-2 text-xs opacity-70">Confidence</div>
-                                    <div className="h-2.5 overflow-hidden rounded-full bg-foreground/10">
-                                        <div
-                                            className={`h-full w-1/3 rounded-full ${t.dot}`}
-                                            style={{ animation: "indeterminate 2s ease-in-out infinite" }}
-                                        />
-                                    </div>
-                                    <div className="mt-1 h-3" />
                                 </div>
                             </div>
                         )}

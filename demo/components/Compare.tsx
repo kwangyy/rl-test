@@ -73,9 +73,9 @@ function RunPanel({ tag, name, row }: { tag: "A" | "B"; name: string; row: Row }
     return (
         <section className="min-w-0 space-y-4" aria-label={`Run ${tag}`}>
             <div className={`rounded-xl px-4 py-3 ring-1 ${tone.panel}`}>
-                <p className="text-xs font-medium uppercase tracking-widest opacity-70" title={name}>Run {tag}</p>
+                <p className="eyebrow" title={name}>Run {tag}</p>
                 <div className="mt-1 flex items-center gap-2.5">
-                    <p className="text-3xl font-semibold capitalize leading-tight">{pretty(row.final.verdict)}</p>
+                    <p className="font-serif text-4xl font-semibold capitalize leading-tight">{pretty(row.final.verdict)}</p>
                     {correct != null && (
                         <span title={correct ? "correct" : "incorrect"} aria-label={correct ? "correct" : "incorrect"}
                             className={`grid size-6 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ${correct ? "bg-success/15 text-success ring-success/30" : "bg-danger/15 text-danger ring-danger/30"}`}>
@@ -200,7 +200,7 @@ export function Compare({ traces, nameA, nameB, setNameA, setNameB, claimsA, cla
     const visible = filtered.slice(offset, offset + pageSize);
 
     return (
-        <section className="min-w-0 rounded-xl border bg-card shadow-sm" aria-label="Compare runs" aria-busy={loading}>
+        <section className="min-w-0 card-raised rounded-xl border bg-card" aria-label="Compare runs" aria-busy={loading}>
             <div className="space-y-4 p-5 pt-4">
                 <div className="flex items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold">Compare runs</h2>

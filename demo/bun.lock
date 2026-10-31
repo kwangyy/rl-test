@@ -5,6 +5,9 @@
     "": {
       "name": "fact-verifier-demo",
       "dependencies": {
+        "@fontsource-variable/geist": "^5.3.0",
+        "@fontsource-variable/geist-mono": "^5.3.0",
+        "@fontsource-variable/source-serif-4": "^5.3.1",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
       },
@@ -19,6 +22,12 @@
     },
   },
   "packages": {
+    "@fontsource-variable/geist": ["@fontsource-variable/geist@5.3.0", "", {}, "sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA=="],
+
+    "@fontsource-variable/geist-mono": ["@fontsource-variable/geist-mono@5.3.0", "", {}, "sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw=="],
+
+    "@fontsource-variable/source-serif-4": ["@fontsource-variable/source-serif-4@5.3.1", "", {}, "sha512-4Rtay22SC4lMvw11r/+9kxANB6P3M0X8s1NudBC2v0J1KU2y3DcMoNcT3lBoZ/CqLirzf+StlO6UlJilyrvaUg=="],
+
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.4.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-zW/hxwc8sJAILGwB5eTC4i48ouGXf0V4lrxmEOk3JIE6JkYVW1TZh1E2pIempqsezgW1sckTIIDudFON8bJ2Mw=="],
 
     "@oven/bun-darwin-x64": ["@oven/bun-darwin-x64@1.4.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-oKGcxLsvh4oHjAo28nPm8c/xN0o/OmGyj1IHYc94vprkWsW2hNg2keEZt5f40cI5Hvu4jDlSRTR0UNpv1UIAxw=="],

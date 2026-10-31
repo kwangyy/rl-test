@@ -56,7 +56,7 @@ export function StepTimeline({ steps, cited, busy }: { steps: Step[]; cited: Set
                         <span className={`absolute left-0 top-1 z-10 grid size-7 place-items-center rounded-full text-sm font-semibold ring-1 ${style.num}`}>
                             {style.icon}
                         </span>
-                        <div className="space-y-2 rounded-lg bg-card p-3 py-2 text-sm text-muted-foreground shadow-sm ring-1 ring-border">
+                        <div className="space-y-2 card-raised rounded-lg bg-card p-3 py-2 text-sm text-muted-foreground ring-1 ring-border">
                             <div className="flex min-w-0 items-center gap-2">
                                 <h3 className="flex items-center gap-1.5 shrink-0 font-medium text-foreground capitalize">
                                     <span className="text-xs font-normal tabular-nums text-muted-foreground">{step.t + 1}</span>
