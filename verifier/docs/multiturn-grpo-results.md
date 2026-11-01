@@ -91,6 +91,22 @@ ablations, the evaluator and the agent loop are untouched:
    so REFUTED stops being the safe default. Changes the project's harm asymmetry.
 3. Both.
 
+**Decision (2026-11-02, Michel): option 1.** Implemented as `RewardConfig.evidence_gate`
+(default off) and the ablation `no_calibration_evidence_gated`; `verifier/tests/test_reward.py`
+checks that `FULL` and the older ablations are unchanged, that only this ablation gates, and
+that gold-NEI claims and wrong verdicts score as before.
+
+## Step 4: both arms with the evidence-gated reward (queued)
+
+| Arm | Config |
+|---|---|
+| Multi-turn, one search required | `grpo-multiturn-from-base-qwen3p5-2b-no-calibration-evidence-gated-bm25k5-min1search-kl0-1000-samples` |
+| Single-turn, oracle context | `grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples` |
+
+Everything else matches steps 2–3. Expected if the gate works: NEI recall rises above the
+step-2 values (0.10 and 0.00), the REFUTED share falls toward the gold share, and FEVER moves
+closer to accuracy, because unsupported right verdicts no longer pay.
+
 ## Reproduce
 
 ```
