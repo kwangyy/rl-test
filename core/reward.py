@@ -52,18 +52,26 @@ class RewardConfig:
 
     mode: "full" (the shaped reward), "format_only" (1 if the output parsed,
     else 0), or "random" (uniform in [0, 1], ignores the episode).
+
+    evidence_gate: a correct SUPPORTED/REFUTED earns correctness credit only when it
+    cites at least one gold sentence (FEVER's evidence requirement); gold NEI is
+    unchanged. Off everywhere except the GRPO ablation that names it.
     """
 
     mode: str = "full"
     calibration: bool = True
     harm: bool = True
     evidence: bool = True
+    evidence_gate: bool = False
 
 
 FULL = RewardConfig()
 ABLATIONS = {
     "full": FULL,
     "no_calibration": RewardConfig(calibration=False),
+    # GRPO from base learned to guess REFUTED without using evidence
+    # (docs/multiturn-grpo-results.md); this ablation withholds credit for unsupported verdicts.
+    "no_calibration_evidence_gated": RewardConfig(calibration=False, evidence_gate=True),
     "no_harm": RewardConfig(harm=False),
     "format_only": RewardConfig(mode="format_only"),
     "random": RewardConfig(mode="random"),
@@ -145,8 +153,11 @@ def total(
     if cfg.mode != "full":
         raise ValueError(f"unknown reward mode {cfg.mode!r}")
 
+    right = correctness(gold, pred, harm=cfg.harm)
+    if cfg.evidence_gate and gold == pred and gold != NEI and evidence_f1(gold_ids, cited_ids) == 0.0:
+        right = 0.0  # a right verdict with no gold sentence cited is scored like a harmless miss
     parts = {
-        "correctness": correctness(gold, pred, harm=cfg.harm),
+        "correctness": right,
         "evidence": evidence_score(gold, pred, gold_ids, cited_ids) if cfg.evidence else 0.0,
         "calibration": calibration(gold, pred, confidence) if cfg.calibration else 0.0,
         "cost": float(n_ops),
