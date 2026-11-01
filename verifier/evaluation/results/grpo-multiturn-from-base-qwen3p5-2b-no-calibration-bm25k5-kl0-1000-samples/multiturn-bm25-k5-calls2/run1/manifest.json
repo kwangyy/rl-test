@@ -1,0 +1,20 @@
+{
+ "model": "Qwen/Qwen3.5-2B",
+ "adapter": "/home/m/michely/rl-test-agent/verifier/experiments/grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-kl0-1000-samples/runs/run1/artifacts/checkpoints",
+ "ids": "/home/m/michely/rl-test-agent/verifier/data/eval/fever-dev-900-ids.json",
+ "n": 0,
+ "method": "bm25",
+ "search_k": 5,
+ "candidate_pages": 3,
+ "max_calls": 2,
+ "budget_grace": 2,
+ "max_new_tokens": 256,
+ "batch_size": 32,
+ "output": "verifier/evaluation/results/grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-kl0-1000-samples/multiturn-bm25-k5-calls2/run1",
+ "model_label": "Qwen/Qwen3.5-2B+grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-kl0-1000-samples_run1",
+ "retrieval_label": "agent-bm25-p3-k5-calls2",
+ "n_claims": 900,
+ "seconds": 55,
+ "seed": 0,
+ "decoding": "greedy"
+}

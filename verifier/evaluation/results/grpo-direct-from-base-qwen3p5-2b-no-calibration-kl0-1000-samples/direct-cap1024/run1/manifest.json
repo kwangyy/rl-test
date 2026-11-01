@@ -1,0 +1,20 @@
+{
+  "job_id": "1055707",
+  "run_name": "run1",
+  "commit": "2904e030f5504f8e51000f3fb102eaa7d65f5acb",
+  "model": "Qwen/Qwen3.5-2B",
+  "checkpoints": "verifier/experiments/grpo-direct-from-base-qwen3p5-2b-no-calibration-kl0-1000-samples/runs/run1/artifacts/checkpoints",
+  "thinking": "off",
+  "native_thinking": false,
+  "prompt_style": "direct",
+  "retrieval": "titles",
+  "max_new_tokens": 1024,
+  "condition": "checkpoint-direct-cap1024",
+  "result_dir": "verifier/evaluation/results/checkpoint-direct-cap1024/run1",
+  "claim_ids_manifest": "verifier/data/eval/fever-dev-900-ids.json",
+  "claim_ids_sha256": "ac9cfead07deb410991d594024e4d5f67165d754dccd87a58c3731761af8eb7e",
+  "n_claims": 900,
+  "predictions": "verifier/evaluation/results/checkpoint-direct-cap1024/run1/predictions.jsonl",
+  "metrics": "verifier/evaluation/results/checkpoint-direct-cap1024/run1/metrics.json",
+  "log": "verifier/evaluation/results/checkpoint-direct-cap1024/run1/logs/run.log"
+}

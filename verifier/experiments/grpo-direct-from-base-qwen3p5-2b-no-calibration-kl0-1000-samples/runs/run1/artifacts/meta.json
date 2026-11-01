@@ -1,0 +1,29 @@
+{
+ "model": "Qwen/Qwen3.5-2B",
+ "sft": "/home/m/michely/rl-test/verifier/experiments/sft-direct-from-base-qwen3p5-2b-disjoint-4500-samples/runs/run1-json-sft/artifacts/checkpoints",
+ "data": "/home/m/michely/rl-test-agent/verifier/data/train/sft/fever-oracle-matched-grpo-1000",
+ "reward": "no_calibration",
+ "n_train": 1000,
+ "num_generations": 8,
+ "prompts_per_step": 2,
+ "lr": 2e-05,
+ "max_steps": 0,
+ "seed": 0,
+ "init": "base",
+ "beta": 0.0,
+ "filter": false,
+ "tag": "",
+ "run_name": "run1",
+ "output_root": null,
+ "config_name": "grpo-direct-from-base-qwen3p5-2b-no-calibration-kl0-1000-samples",
+ "steps": 500,
+ "train_seconds": 5933,
+ "peak_gpu_gb": 16.28,
+ "harm": {
+  "REFUTED->SUPPORTED": 1.5,
+  "SUPPORTED->REFUTED": 1.0,
+  "NEI->SUPPORTED": 1.75,
+  "NEI->REFUTED": 1.0
+ },
+ "nei_cited_penalty": 0.5
+}
