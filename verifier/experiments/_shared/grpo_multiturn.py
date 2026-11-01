@@ -90,6 +90,9 @@ class FeverSearchEnv:
     # TRL is given budget_grace extra iterations so the model still gets to reply.
     max_calls = 2
     budget_grace = 2
+    # Answers given after fewer real searches score FORMAT_FAIL (--min-searches). Without it,
+    # run1 from base stopped searching by step 17 and guessed REFUTED from the claim alone.
+    min_calls = 0
 
     LAST_SEARCH = "\n(That was your last search. Reply now with only the JSON object.)"
     ANSWER_NOW = "No searches left. Reply now with only the JSON object."
@@ -178,7 +181,7 @@ def score_one(messages, env, gold, gold_ids, cfg, rng):
     last = messages[-1] if messages else {}
     text = last.get("content") or ""
     obj, ok = parse(text) if not last.get("tool_calls") else ({}, {"json": False})
-    if not all(ok.values()):
+    if not all(ok.values()) or env.n_search < env.min_calls:
         return FORMAT_FAIL, None
     cited = [env.shown[e] for e in obj["evidence"][:MAX_CITED] if e in env.shown]
     return R.total(gold, VERDICT[obj["verdict"]], float(obj["confidence"]), gold_ids, cited,
@@ -304,6 +307,8 @@ if __name__ == "__main__":
     ap.add_argument("--prompts-per-step", type=int, default=2)
     ap.add_argument("--max-calls", type=int, default=2,
                     help="search budget per claim; each result is ~860 tokens, so 3 calls need --max-completion-length 3072")
+    ap.add_argument("--min-searches", type=int, default=0,
+                    help="an answer after fewer real searches scores as a format failure")
     ap.add_argument("--budget-grace", type=int, default=2,
                     help="extra tool iterations that answer past-budget calls with 'reply now'; "
                          "0 restores the historical behaviour, where such rollouts end unanswered")
@@ -328,6 +333,9 @@ if __name__ == "__main__":
         ap.error("ranked search requires explicit --config-name and --run-name")
     if a.budget_grace < 0:
         ap.error("budget-grace must be nonnegative")
+    if not 0 <= a.min_searches <= a.max_calls:
+        ap.error("min-searches must be between 0 and max-calls")
+    FeverSearchEnv.min_calls = a.min_searches
     FeverSearchEnv.method = a.method
     FeverSearchEnv.k_pages, FeverSearchEnv.search_k = a.candidate_pages, a.search_k
     FeverSearchEnv.max_calls, FeverSearchEnv.budget_grace = a.max_calls, a.budget_grace
