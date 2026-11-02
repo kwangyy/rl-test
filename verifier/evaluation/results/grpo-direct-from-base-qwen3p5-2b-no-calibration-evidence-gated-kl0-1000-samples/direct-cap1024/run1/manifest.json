@@ -1,0 +1,20 @@
+{
+  "job_id": "1056949",
+  "run_name": "run1",
+  "commit": "ba1fe0d6f31e6dda708face57add2a6e872cd6d8",
+  "model": "Qwen/Qwen3.5-2B",
+  "checkpoints": "verifier/experiments/grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples/runs/run1/artifacts/checkpoints",
+  "thinking": "off",
+  "native_thinking": false,
+  "prompt_style": "direct",
+  "retrieval": "titles",
+  "max_new_tokens": 1024,
+  "condition": "grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples",
+  "result_dir": "verifier/evaluation/results/grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples/run1",
+  "claim_ids_manifest": "verifier/data/eval/fever-dev-900-ids.json",
+  "claim_ids_sha256": "ac9cfead07deb410991d594024e4d5f67165d754dccd87a58c3731761af8eb7e",
+  "n_claims": 900,
+  "predictions": "verifier/evaluation/results/grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples/run1/predictions.jsonl",
+  "metrics": "verifier/evaluation/results/grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples/run1/metrics.json",
+  "log": "verifier/evaluation/results/grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples/run1/logs/run.log"
+}

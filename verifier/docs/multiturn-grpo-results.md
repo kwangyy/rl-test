@@ -63,7 +63,7 @@ The untrained base row is `base-qwen3p5-2b/multiturn-bm25-k5-calls2/run1`.
   prompts always contain the gold pages (oracle context), and a wrong REFUTED/SUPPORTED on an
   NEI claim is cheaper than missing a supported verdict.
 
-## Step 3: multi-turn rerun requiring one search (running)
+## Step 3: multi-turn rerun requiring one search
 
 Config `grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-min1search-kl0-1000-samples`
 adds `--min-searches 1`: an answer given before any real search scores as a format failure.
@@ -71,11 +71,11 @@ This is the tool prompt's own instruction ("Use the search tool…") and base al
 in every rollout, so training starts inside the allowed region. The reward is otherwise
 unchanged. Job 1056636; evaluation 1056637 runs after it.
 
-Training rollouts so far: exactly one search per rollout, 100% valid answers, no cut-offs,
-and evidence F1 on non-NEI claims up from 0.31 (steps 0–10) to 0.45 (steps 17–27). But
-predicted verdicts are drifting to REFUTED (45 → 126 of ~150 per 10 steps) and NEI is
-disappearing (17 → 3), and the mean reward has not risen after step 10. Searching is
-enforced, but the verdict shortcut from step 2 remains.
+Result: searching is enforced, but the verdict shortcut from step 2 remains. From step 125
+the model predicts REFUTED in 800 of 800 rollouts per 50 steps, and the mean reward stays
+near 0.34–0.45. On the 900 dev claims (job 1056637): accuracy 0.333, FEVER 0.204, recall
+S / R / NEI 0.00 / 1.00 / 0.00, one search per claim. It still cites well when it is right
+(evidence F1 0.640), which is why FEVER exceeds step 2's 0.034.
 
 ## Open decision: a reward change for GRPO only
 
@@ -96,7 +96,7 @@ ablations, the evaluator and the agent loop are untouched:
 checks that `FULL` and the older ablations are unchanged, that only this ablation gates, and
 that gold-NEI claims and wrong verdicts score as before.
 
-## Step 4: both arms with the evidence-gated reward (queued)
+## Step 4: both arms with the evidence-gated reward
 
 | Arm | Config |
 |---|---|
@@ -106,6 +106,52 @@ that gold-NEI claims and wrong verdicts score as before.
 Everything else matches steps 2–3. Expected if the gate works: NEI recall rises above the
 step-2 values (0.10 and 0.00), the REFUTED share falls toward the gold share, and FEVER moves
 closer to accuracy, because unsupported right verdicts no longer pay.
+
+Jobs 1056946 / 1056947 (training, about 1.5 h each on A100-40), evaluations 1056948 / 1056949.
+
+### All runs on the 900 dev claims
+
+| Model | Reward | Accuracy | FEVER | Evidence F1 | Recall S / R / NEI | Harm-weighted error | Searches |
+|---|---|---:|---:|---:|---|---:|---:|
+| Base, untrained, searching itself | — | 0.448 | 0.382 | 0.385 | 0.71 / 0.35 / 0.29 | 0.659 | 1.68 |
+| Multi-turn GRPO (step 2) | no calibration | 0.438 | 0.034 | 0.000 | 0.22 / 0.99 / 0.10 | 0.578 | 0.00 |
+| Multi-turn GRPO, one search (step 3) | no calibration | 0.333 | 0.204 | 0.640 | 0.00 / 1.00 / 0.00 | 0.667 | 1.00 |
+| **Multi-turn GRPO, one search (step 4)** | **evidence-gated** | **0.676** | **0.540** | 0.623 | **0.78 / 0.84 / 0.41** | **0.382** | 1.00 |
+| Single-turn GRPO, oracle context (step 2) | no calibration | 0.594 | 0.251 | 0.369 | 0.83 / 0.95 / 0.00 | 0.480 | — |
+| Single-turn GRPO, oracle context (step 4) | evidence-gated | 0.443 | 0.419 | 0.131 | 0.34 / 0.02 / 0.96 | 0.569 | — |
+
+### What the gate did
+
+- **Multi-turn: GRPO now learns the task.** Training reward rose steadily (0.51 → 0.81 per
+  50-step window), every rollout stayed valid, and predicted verdicts stayed mixed (about
+  40% NEI, 35% SUPPORTED, 20–25% REFUTED to the end). On dev it improves on the untrained
+  base by +22.8 points accuracy and +15.8 FEVER, with one search of 5 sentences per claim
+  and no SFT. It is the only run in this study that keeps all three labels.
+- **Single-turn: the gate traded one collapse for another.** Training reward peaked near
+  step 250 (0.89 per 25 steps) and fell to 0.55 by the end; on dev the model now answers
+  NEI for 96% of NEI claims but also for most supported and refuted ones (recall 0.34 / 0.02).
+  FEVER rose (0.251 → 0.419) because unsupported right answers were already scored as FEVER
+  errors, but accuracy fell. Trained on oracle context, it learned that citing the wrong
+  sentence costs the whole verdict, and abstains whenever the shown context is unfamiliar
+  (titles retrieval at evaluation).
+
+### Caveats before comparing arms
+
+- **The arms see different evidence at evaluation.** Multi-turn reads only what its own search
+  returns (5 sentences); single-turn reads the title-retrieval context (up to 100 sentences).
+  This is the matched-training comparison, not a matched-context one.
+- **One seed each,** and all numbers are on the 900 dev claims, which earlier prompt work also
+  used. Confirm the multi-turn result on the frozen holdout (`fever-evaluation-v1/holdout-3000-ids.json`)
+  and with a second seed before reporting it as a finding.
+- **Reference points, not matched:** Chien Hung's SFT4500 → CoT GRPO reaches 0.747 accuracy and
+  0.673 FEVER with oracle-trained thinking and title retrieval at evaluation.
+
+### Next
+
+1. Holdout evaluation of the step-4 multi-turn model (no training needed).
+2. Second seed of the step-4 multi-turn run.
+3. Single-turn arm: the gate needs either a softer form (partial credit instead of zero) or
+   training on retrieval context instead of oracle context; decide with the group.
 
 ## Reproduce
 

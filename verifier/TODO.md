@@ -39,7 +39,7 @@ CoT SFT data preparation can proceed in parallel with step 1; it is a separate e
 - [ ] Measure stated confidence and verdict-token probability separately; both predict whether the chosen verdict is correct. Inspect NEI and retrieval-miss subsets.
 - [ ] Fit temperature scaling and a simple correctness predictor on a separate calibration split; evaluate once on holdout.
 - [ ] Audit reward components, wrong-`SUPPORTED` harm, NEI behaviour, and confidence collapse. Compare reward ablations only with matched SFT and multiple seeds.
-- [ ] Multi-turn GRPO ([multiturn-grpo-results.md](docs/multiturn-grpo-results.md)): SFT4500 never calls search, so both matched arms start from base. Run1 from base stopped searching by step 17 and answers REFUTED (3.4% FEVER); single-turn from base never predicts NEI. The `--min-searches 1` rerun searches but drifts to REFUTED. Choose a GRPO-only reward ablation (evidence-gated correctness and/or symmetric REFUTED harm) with the group, then rerun both arms.
+- [ ] Multi-turn GRPO ([multiturn-grpo-results.md](docs/multiturn-grpo-results.md)): SFT4500 never calls search, so both matched arms start from base. Run1 from base stopped searching by step 17 and answers REFUTED (3.4% FEVER); single-turn from base never predicts NEI. The `--min-searches 1` rerun searches but answers REFUTED for everything. With the GRPO-only evidence-gated reward, multi-turn reaches 0.676 accuracy / 0.540 FEVER with all three labels (untrained base 0.448 / 0.382); single-turn on oracle context collapses to NEI. Next: holdout evaluation and a second seed of the gated multi-turn run; a softer gate or retrieval-context training for single-turn.
 
 ## P3 — train and integrate only after controls (RL-1/2/3, agent group)
 
