@@ -16,6 +16,12 @@ source .venv/bin/activate
 export TMPDIR="${TMPDIR:-$HOME/.pip-tmp}" TOKENIZERS_PARALLELISM=false
 last="${CONTROLLER:?}"; last="${last##*,}"; last="${last#local:}"
 test -f "$last/adapter_model.safetensors" || { echo "no adapter at $last yet; nothing to evaluate"; exit 0; }
+# A decompose on a claim missing from the cache calls OpenRouter; there is no key on SoC.
+# The committed flash prompt-v2 cache covers all 900 IDs; agent.prompted looks for it under
+# the manifest-tagged name, so copy it there when that file is missing.
+dec=verifier/data/decompose
+tagged=$dec/fever_dev_qwen_qwen3.8-flash_n900_promptv2_fever-dev-900-ids-ac9cfead.jsonl
+[[ -f "$tagged" ]] || cp "$dec/fever_dev_qwen_qwen3.8-flash_n900_promptv2.jsonl" "$tagged"
 echo "job=$SLURM_JOB_ID commit=$(git rev-parse HEAD) node=$(hostname) controller=$CONTROLLER"
 python -m agent.prompted --tools follow --chunk 64 --controller "$CONTROLLER" \
   --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints \
