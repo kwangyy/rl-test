@@ -34,7 +34,11 @@ on the 900 claims" ([live-backend.md](live-backend.md)).
 | SFT4500 (JSON SFT) | 1 / 120 | 116 / 120 | 0 / 120 |
 | Base Qwen3.5-2B | 120 / 120 | 90 / 120 | 24 / 120 |
 
-30 train claims × 4 samples each (job 1055567, A100). Greedy evaluation of SFT4500 on 32 dev
+30 train claims × 4 samples each (job 1055567, A100). Rollouts, logs and metadata
+(adapter weights omitted) are under
+`verifier/experiments/grpo-multiturn-from-{sft4500,base}-qwen3p5-2b-no-calibration-bm25k5-lr0-probe-30-samples/runs/check2-{sft,base}-a100/`;
+they ran from `~/mt-toolcheck` on SoC with `--lr 0 --max-steps 15 --n-train 30 --num-generations 4`,
+and their `meta.json` keeps the original config name `mt-toolcheck-bm25-k5`. Greedy evaluation of SFT4500 on 32 dev
 claims also made no searches. **Single-turn JSON SFT removed tool use**, so a GRPO run from
 SFT4500 would have nothing to reinforce. Both GRPO arms below start from base.
 (H100 runs fail in `fla`'s gated-delta backward with this Triton; use A100.)
@@ -71,9 +75,9 @@ This is the tool prompt's own instruction ("Use the search tool…") and base al
 in every rollout, so training starts inside the allowed region. The reward is otherwise
 unchanged. Job 1056636; evaluation 1056637 runs after it.
 
-Result: searching is enforced, but the verdict shortcut from step 2 remains. From step 125
-the model predicts REFUTED in 800 of 800 rollouts per 50 steps, and the mean reward stays
-near 0.34–0.45. On the 900 dev claims (job 1056637): accuracy 0.333, FEVER 0.204, recall
+Result: searching is enforced, but the verdict shortcut from step 2 remains. From step 23
+onward every training rollout predicts REFUTED, and the mean reward stays between 0.30 and
+0.52 per 50-step window (see [Training curves](#training-curves)). On the 900 dev claims (job 1056637): accuracy 0.333, FEVER 0.204, recall
 S / R / NEI 0.00 / 1.00 / 0.00, one search per claim. It still cites well when it is right
 (evidence F1 0.640), which is why FEVER exceeds step 2's 0.034.
 
@@ -146,10 +150,106 @@ Jobs 1056946 / 1056947 (training, about 1.5 h each on A100-40), evaluations 1056
 - **Reference points, not matched:** Chien Hung's SFT4500 → CoT GRPO reaches 0.747 accuracy and
   0.673 FEVER with oracle-trained thinking and title retrieval at evaluation.
 
+### Training curves
+
+![GRPO training curves](figures/multiturn-grpo-training.png)
+
+Per 50-step window, from each run's committed `artifacts/logs/train_log.json`; the predicted-label
+shares come from `artifacts/rollouts.jsonl` (multi-turn runs only; single-turn runs did not save
+rollouts). Regenerate the figure and tables with
+
+```
+python -m verifier.evaluation.grpo_training_curves --window 50 \
+  --figure verifier/docs/figures/multiturn-grpo-training.png \
+  --runs verifier/experiments/<config>/runs/run1 [...]
+```
+
+Rewards are not comparable across reward configurations: under the evidence gate the
+correctness term is zero for an uncited right verdict, so the gated runs' reward is on a
+different scale from the ungated ones. Compare runs on the dev metrics above.
+
+**Multi-turn, step 2**: `grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-kl0-1000-samples` / `run1` (reward `no_calibration`, 50-step windows)
+
+| steps | reward | correctness | evidence | valid format | searches | pred S | pred R | pred NEI |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1-50 | 0.48 | 0.46 | 0.12 | 0.98 | 0.34 | 0.37 | 0.41 | 0.21 |
+| 51-100 | 0.49 | 0.49 | 0.01 | 1.00 | 0.00 | 0.26 | 0.72 | 0.02 |
+| 101-150 | 0.36 | 0.36 | 0.00 | 1.00 | 0.00 | 0.40 | 0.60 | 0.00 |
+| 151-200 | 0.40 | 0.38 | 0.05 | 1.00 | 0.00 | 0.41 | 0.42 | 0.17 |
+| 201-250 | 0.50 | 0.45 | 0.13 | 0.99 | 0.00 | 0.13 | 0.51 | 0.36 |
+| 251-300 | 0.49 | 0.45 | 0.09 | 1.00 | 0.00 | 0.24 | 0.47 | 0.29 |
+| 301-350 | 0.56 | 0.47 | 0.21 | 0.99 | 0.00 | 0.06 | 0.38 | 0.57 |
+| 351-400 | 0.53 | 0.46 | 0.16 | 1.00 | 0.00 | 0.00 | 0.41 | 0.58 |
+| 401-450 | 0.59 | 0.53 | 0.12 | 1.00 | 0.00 | 0.11 | 0.62 | 0.27 |
+| 451-500 | 0.43 | 0.42 | 0.01 | 1.00 | 0.00 | 0.14 | 0.82 | 0.04 |
+
+**Multi-turn, one search, step 3**: `grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-min1search-kl0-1000-samples` / `run1` (reward `no_calibration`, 50-step windows)
+
+| steps | reward | correctness | evidence | valid format | searches | pred S | pred R | pred NEI |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1-50 | 0.34 | 0.37 | 0.07 | 0.98 | 1.06 | 0.21 | 0.72 | 0.05 |
+| 51-100 | 0.35 | 0.35 | 0.04 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 101-150 | 0.30 | 0.34 | -0.04 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 151-200 | 0.34 | 0.34 | 0.04 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 201-250 | 0.35 | 0.35 | 0.05 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 251-300 | 0.44 | 0.40 | 0.12 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 301-350 | 0.35 | 0.36 | 0.02 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 351-400 | 0.52 | 0.45 | 0.17 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 401-450 | 0.36 | 0.35 | 0.07 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+| 451-500 | 0.32 | 0.33 | 0.02 | 1.00 | 1.00 | 0.00 | 1.00 | 0.00 |
+
+**Multi-turn, one search, evidence-gated, step 4**: `grpo-multiturn-from-base-qwen3p5-2b-no-calibration-evidence-gated-bm25k5-min1search-kl0-1000-samples` / `run1` (reward `no_calibration_evidence_gated`, 50-step windows)
+
+| steps | reward | correctness | evidence | valid format | searches | pred S | pred R | pred NEI |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1-50 | 0.51 | 0.42 | 0.37 | 0.96 | 1.05 | 0.35 | 0.19 | 0.45 |
+| 51-100 | 0.70 | 0.49 | 0.45 | 1.00 | 1.00 | 0.35 | 0.24 | 0.41 |
+| 101-150 | 0.70 | 0.50 | 0.45 | 1.00 | 1.00 | 0.33 | 0.19 | 0.49 |
+| 151-200 | 0.66 | 0.46 | 0.43 | 1.00 | 1.00 | 0.24 | 0.16 | 0.60 |
+| 201-250 | 0.72 | 0.50 | 0.48 | 1.00 | 1.00 | 0.24 | 0.11 | 0.65 |
+| 251-300 | 0.72 | 0.50 | 0.48 | 1.00 | 1.00 | 0.31 | 0.19 | 0.50 |
+| 301-350 | 0.75 | 0.52 | 0.51 | 1.00 | 1.00 | 0.19 | 0.09 | 0.72 |
+| 351-400 | 0.68 | 0.48 | 0.46 | 1.00 | 1.00 | 0.34 | 0.15 | 0.50 |
+| 401-450 | 0.84 | 0.59 | 0.55 | 1.00 | 1.00 | 0.38 | 0.18 | 0.44 |
+| 451-500 | 0.81 | 0.58 | 0.51 | 1.00 | 1.00 | 0.35 | 0.23 | 0.41 |
+
+**Single-turn, oracle context, step 2**: `grpo-direct-from-base-qwen3p5-2b-no-calibration-kl0-1000-samples` / `run1` (reward `no_calibration`, 50-step windows)
+
+| steps | reward | correctness | evidence | valid format |
+|---|---:|---:|---:|---:|
+| 1-50 | 0.55 | 0.48 | 0.27 | 0.97 |
+| 51-100 | 0.71 | 0.55 | 0.33 | 1.00 |
+| 101-150 | 0.60 | 0.48 | 0.25 | 1.00 |
+| 151-200 | 0.64 | 0.51 | 0.27 | 1.00 |
+| 201-250 | 0.61 | 0.51 | 0.21 | 1.00 |
+| 251-300 | 0.82 | 0.61 | 0.44 | 1.00 |
+| 301-350 | 0.95 | 0.67 | 0.56 | 0.99 |
+| 351-400 | 1.03 | 0.76 | 0.55 | 1.00 |
+| 401-450 | 0.87 | 0.68 | 0.39 | 1.00 |
+| 451-500 | 0.58 | 0.48 | 0.21 | 1.00 |
+
+**Single-turn, oracle context, evidence-gated, step 4**: `grpo-direct-from-base-qwen3p5-2b-no-calibration-evidence-gated-kl0-1000-samples` / `run1` (reward `no_calibration_evidence_gated`, 50-step windows)
+
+| steps | reward | correctness | evidence | valid format |
+|---|---:|---:|---:|---:|
+| 1-50 | 0.44 | 0.35 | 0.29 | 0.97 |
+| 51-100 | 0.81 | 0.56 | 0.49 | 1.00 |
+| 101-150 | 0.81 | 0.55 | 0.52 | 1.00 |
+| 151-200 | 0.82 | 0.56 | 0.51 | 1.00 |
+| 201-250 | 0.73 | 0.49 | 0.48 | 1.00 |
+| 251-300 | 0.96 | 0.64 | 0.65 | 1.00 |
+| 301-350 | 0.81 | 0.54 | 0.54 | 1.00 |
+| 351-400 | 0.40 | 0.27 | 0.27 | 1.00 |
+| 401-450 | 0.36 | 0.24 | 0.24 | 1.00 |
+| 451-500 | 0.58 | 0.39 | 0.39 | 1.00 |
+
 ### Next
 
-1. Holdout evaluation of the step-4 multi-turn model (no training needed).
-2. Second seed of the step-4 multi-turn run.
+1. Holdout evaluation of the step-4 multi-turn model (no training needed): running on SoC as of
+   2026-11-02, job 1058798 (step-4 model, `run1-holdout3000`) and job 1058799 (untrained base,
+   `holdout3000`) on the 3,000 holdout IDs. Results are not in this PR yet.
+2. Second seed of the step-4 multi-turn run: job 1058800 (`mt-gated-s1`) is queued, with its
+   evaluation 1058801 dependent on it.
 3. Single-turn arm: the gate needs either a softer form (partial credit instead of zero) or
    training on retrieval context instead of oracle context; decide with the group.
 
