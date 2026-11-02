@@ -78,12 +78,66 @@ spread across their rollouts; 11 decompose calls had no cached split.
 The invalid-output rate does not rise. The train reward does not clearly rise either; each
 step trains on different claims, so windows differ mostly by claim difficulty. KL to the
 imitation controller stays below 0.001, so after 38 updates at lr 1e-5 the policy has moved
-very little. Dev 900 evaluation: jobs 1060509/1060510.
+very little. Dev 900 evaluation: job 1064145 (below).
 
 ### Full run: 1,000 claims
 
 Config `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-1000-samples`, run
-`run1`, chain 1059772–1059775, dev 900 evaluation 1059789/1059790 after it. *Running.*
+`run1`, 1,000 claims (seed 5) × 8 rollouts, 125 updates, same settings as the short run.
+Chain 1059772–1059775: 6 h 41 min of training over three A100-40 jobs, stopping and resuming
+cleanly after steps 51 and 102 (the fourth job found the run finished and exited). Peak 19.3 GB.
+173 of 1,000 claims had FEVER spread; 5 decompose calls had no cached split.
+
+| Steps | Train reward | Sampled FEVER | Actions | Invalid replies | Abstain | KL |
+|---|---:|---:|---:|---:|---:|---:|
+| 1–20 | 0.656 | 0.705 | 3.84 | 0.42% | 14.3% | 0.0004 |
+| 21–40 | 0.640 | 0.688 | 3.65 | 0.51% | 14.0% | 0.0020 |
+| 41–60 | 0.628 | 0.671 | 3.68 | 0.28% | 13.4% | 0.0014 |
+| 61–80 | 0.654 | 0.700 | 3.88 | 0.29% | 14.0% | 0.0010 |
+| 81–100 | 0.625 | 0.673 | 3.70 | 0.45% | 14.1% | 0.0013 |
+| 101–125 | 0.665 | 0.712 | 4.05 | 0.25% | 20.8% | 0.0016 |
+
+## Dev 900 results
+
+Same 900 frozen dev claims, follow preset, 5895/run1 verifier, greedy controller
+(`eval_controller.sbatch`). Traces: `verifier/data/controller/dev900-follow-controller-traces/`
+(`local-grpo-ctl-300-run1-follow.jsonl.gz`, `local-grpo-ctl-1000-run1-follow.jsonl.gz`, with
+manifest entries). A rerun of the imitation controller on SoC (job 1060509) scored 0.686 FEVER /
+0.762 accuracy against the handover's 0.684 / 0.764, so the SoC evaluation reproduces the baseline.
+
+| Controller | FEVER | Accuracy | Recall S / R / NEI | Actions | Abstain |
+|---|---:|---:|---|---:|---:|
+| Fixed loop (handover) | 0.666 | 0.771 | | | |
+| Flash, prompted (handover) | 0.690 | 0.781 | | 3.88 | |
+| Imitation run1 (handover; the start) | 0.684 | 0.764 | | 3.70 | |
+| GRPO, 300 claims | 0.681 | 0.763 | 0.853 / 0.747 / 0.690 | 3.56 | 14.8% |
+| GRPO, 1,000 claims | 0.687 | 0.764 | 0.863 / 0.747 / 0.683 | 3.63 | 21.1% |
+
+Exact McNemar on FEVER, same claims:
+
+| Comparison | Only first right / only second right | p |
+|---|---:|---:|
+| GRPO 1,000 vs imitation | 12 / 10 | 0.83 |
+| GRPO 1,000 vs flash | 38 / 41 | 0.82 |
+| GRPO 300 vs imitation | 13 / 16 | 0.71 |
+| GRPO 300 vs flash | 37 / 45 | 0.44 |
+
+**Result: no measurable change.** Neither GRPO controller differs from the imitation controller
+or from flash on dev 900; the 1,000-claim controller gives the same final verdict as imitation on
+97.7% of claims. Under the handover's success bar (beat imitation by McNemar) GRPO has not
+succeeded. What did change is small and follows the reward: slightly fewer operations
+(3.70 → 3.63) from the per-operation cost, and more abstaining in the 1,000-claim run
+(21% of episodes against 15%) without a gain in NEI recall.
+
+Why it barely moved: KL to the imitation controller stayed at or below 0.002 for the whole run
+(lr 1e-5, beta 0.04), and only 17% of claims had rollouts that disagreed on FEVER, so most
+updates carried little outcome signal. This is consistent with `controller-status.md` section 4:
+most remaining misses are the verifier's, and the controller's own share (63 of 279 flash misses)
+leaves little for a better controller to recover.
+
+Possible next runs, not done: a higher learning rate (about 5e-5) or lower beta so the policy
+actually moves; training only on the claims with FEVER spread; or rewarding against the
+controller-attributable failures (gold retrieved but never sent to the verifier).
 
 ## Running on SoC
 
