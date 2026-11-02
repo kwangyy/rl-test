@@ -41,3 +41,16 @@ def test_spread_counts():
     rows = [row("SUPPORTED", "SUPPORTED", ["A:1"]), row("SUPPORTED", "REFUTED"),
             row("SUPPORTED", "SUPPORTED", ["A:1"]), row("SUPPORTED", "SUPPORTED", ["A:1"])]
     assert fever_spread(rows, 2) == 1
+
+
+def test_spread_claim_ids_keeps_mixed_groups_once(tmp_path):
+    import json
+    from verifier.experiments._shared.grpo_controller import spread_claim_ids
+    a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
+    rows_a = [{"id": 1, "group": 0, "fever": True}, {"id": 1, "group": 0, "fever": False},
+              {"id": 2, "group": 1, "fever": True}, {"id": 2, "group": 1, "fever": True}]
+    rows_b = [{"id": 3, "group": 0, "fever": False}, {"id": 3, "group": 0, "fever": True},
+              {"id": 1, "group": 1, "fever": True}, {"id": 1, "group": 1, "fever": False}]
+    a.write_text("".join(json.dumps(r) + "\n" for r in rows_a))
+    b.write_text("".join(json.dumps(r) + "\n" for r in rows_b))
+    assert spread_claim_ids([a, b]) == [1, 3]

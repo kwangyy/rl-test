@@ -95,6 +95,33 @@ def fever_spread(rows, group_size):
     return sum(0 < sum(g) < len(g) for g in groups)
 
 
+def spread_claim_ids(paths):
+    """Claim IDs whose rollouts in earlier runs' rollouts.jsonl were some FEVER-right, some wrong.
+    First-seen order, without duplicates across runs."""
+    out = {}
+    for p in paths:
+        groups = {}
+        with open(p, encoding="utf-8") as f:
+            for row in map(json.loads, f):
+                groups.setdefault(row["group"], (row["id"], []))[1].append(bool(row["fever"]))
+        for cid, oks in groups.values():
+            if 0 < sum(oks) < len(oks):
+                out.setdefault(cid, None)
+    return list(out)
+
+
+def load_train_claims(ids):
+    """FEVER train rows for these IDs, in that order; refuses reserved (dev, calibration, holdout) IDs."""
+    from retrieval.build_bm25_index import DATA
+    from utils.fever_eval import assert_not_reserved
+    want = set(map(str, ids))
+    with open(os.path.join(DATA, "train.jsonl"), encoding="utf-8") as f:
+        rows = {str(r["id"]): r for r in map(json.loads, f) if str(r["id"]) in want}
+    out = [rows[str(i)] for i in ids if str(i) in rows]
+    assert_not_reserved(out, "controller GRPO claims")
+    return out
+
+
 def compact(row, reward, group, sample):
     """A trace row without retrieved hits, for rollouts.jsonl."""
     steps = []
@@ -322,6 +349,9 @@ def main(defaults=None):
     ap.add_argument("--verify-batch", type=int, default=16)
     ap.add_argument("--save-steps", type=int, default=25)
     ap.add_argument("--rollouts-only", action="store_true", help="pilot: sample and score, no update")
+    ap.add_argument("--claims-from", nargs="*", default=None,
+                    help="rollouts.jsonl of earlier runs: train on their claims with FEVER spread instead of a fresh draw")
+    ap.add_argument("--epochs", type=int, default=1, help="passes over the claims")
     ap.add_argument("--resume", action="store_true",
                     help="continue this run from artifacts/resume if present (start it if absent; exit if finished)")
     ap.add_argument("--resume-every", type=int, default=5, help="save the full resume state every N steps")
@@ -353,8 +383,18 @@ def main(defaults=None):
     (artifacts / "logs").mkdir(parents=True, exist_ok=True)
 
     import torch
-    claims = train_claims(a.n_train, a.train_seed)
-    print(f"{len(claims)} claims x {a.group_size} rollouts, {'pilot (no update)' if a.rollouts_only else 'training'}")
+    if a.claims_from:  # the claims whose rollouts disagreed on FEVER in earlier runs, a.epochs passes
+        unique = load_train_claims(spread_claim_ids([ROOT / p for p in a.claims_from]))
+        a.n_train = len(unique)
+        rng, claims = random.Random(a.train_seed), []
+        for _ in range(a.epochs):
+            order = unique[:]
+            rng.shuffle(order)
+            claims += order
+    else:
+        claims = train_claims(a.n_train, a.train_seed) * a.epochs
+    print(f"{len(claims)} claim passes x {a.group_size} rollouts, "
+          f"{'pilot (no update)' if a.rollouts_only else 'training'}")
     policy = SampledController(a.model, a.imitation, a.temperature, gen_batch=a.gen_batch, seed=a.seed)
     search = FeverSearch(method="bm25")
     verify = LocalVerify(search, a.model, a.verifier)
