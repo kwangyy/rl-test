@@ -95,5 +95,5 @@ load this `.venv`. Jobs stop at 3 h, so training runs as a chain that resumes:
 cfg=verifier/experiments/<config>/train.py
 j=$(sbatch --parsable --export=ALL,TRAIN_SCRIPT=$cfg,RUN_NAME=run1 verifier/experiments/run_controller_grpo.sbatch)
 for i in 2 3 4; do j=$(sbatch --parsable --dependency=afterany:$j --export=ALL,TRAIN_SCRIPT=$cfg,RUN_NAME=run1 verifier/experiments/run_controller_grpo.sbatch); done
-sbatch --dependency=afterany:$j --export=ALL,CONTROLLER=local:<imitation checkpoints>,<run checkpoints> verifier/evaluation/eval_controller.sbatch
+sbatch --dependency=afterany:$j --export=ALL,CONTROLLER=local:<imitation checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch
 ```

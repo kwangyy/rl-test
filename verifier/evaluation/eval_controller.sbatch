@@ -8,13 +8,15 @@
 # Dev 900 evaluation of a controller in the prompted follow loop with the 5895/run1
 # verifier, as the handover's section 4. agent.prompted skips claims already in its
 # trace, so chain two jobs with --dependency=afterany if one does not finish in 3 h.
-#   CONTROLLER=local:<imitation checkpoints>,<grpo run checkpoints>  (or local:<imitation> for the baseline)
+#   CONTROLLER=local:<imitation checkpoints>   GRPO=<grpo run checkpoints>   (omit GRPO for the baseline)
+# GRPO is a separate variable because sbatch --export splits values on commas.
 # Exits at once when the controller's checkpoints do not exist yet (a training chain still running).
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?submit from the repo root}"
 source .venv/bin/activate
 export TMPDIR="${TMPDIR:-$HOME/.pip-tmp}" TOKENIZERS_PARALLELISM=false
-last="${CONTROLLER:?}"; last="${last##*,}"; last="${last#local:}"
+CONTROLLER="${CONTROLLER:?}${GRPO:+,$GRPO}"
+last="${CONTROLLER##*,}"; last="${last#local:}"
 test -f "$last/adapter_model.safetensors" || { echo "no adapter at $last yet; nothing to evaluate"; exit 0; }
 # A decompose on a claim missing from the cache calls OpenRouter; there is no key on SoC.
 # The committed flash prompt-v2 cache covers all 900 IDs; agent.prompted looks for it under
