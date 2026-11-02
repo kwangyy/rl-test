@@ -1,6 +1,6 @@
 # Multi-turn GRPO: first matched runs (2026-11-01)
 
-RL-2 (Michel), on the RL / agent boundary. Branch `mt-grpo` (from `agent` at `8fd8da7`).
+RL-2 (Michel), on the RL / agent boundary. Branch `mt-grpo-on-handover` (PR #3, on `controller/grpo-handover` at `9c550c6`). The runs were made on `mt-grpo` (from `agent` at `8fd8da7`, PR #2); commit hashes below are from that branch.
 This page records why each run exists, what it changed, and what it showed, so the
 numbers can be read without the session that produced them.
 
@@ -256,7 +256,7 @@ different scale from the ungated ones. Compare runs on the dev metrics above.
 ## Reproduce
 
 ```
-# on SoC, repo root on branch mt-grpo; A100 only
+# on SoC, repo root on branch mt-grpo-on-handover; A100 only
 SFT=<SFT4500 run1-json-sft checkpoints>   # LoRA shape only for base-start runs
 sbatch --time=36:00:00 --export=ALL,TRAIN_SCRIPT=verifier/experiments/<config>/train.py,SFT_CHECKPOINTS=$SFT,RUN_NAME=<new run> \
   verifier/experiments/run_train.sbatch
