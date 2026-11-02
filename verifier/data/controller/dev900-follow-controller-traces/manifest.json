@@ -1,5 +1,5 @@
 {
- "description": "Dev 900 traces of the prompted loop (follow tools, 5895 verifier) under two controllers: qwen3.8-flash, and the 2B imitation controller trained on flash's train trajectories. Baselines for controller GRPO.",
+ "description": "Dev 900 traces of the prompted loop (follow tools, 5895 verifier) under two controllers: qwen3.8-flash, and the 2B imitation controller trained on flash's train trajectories. Baselines for controller GRPO, and two controller GRPO runs from the imitation controller (300 and 1,000 train claims).",
  "claim_ids": "verifier/data/eval/fever-dev-900-ids.json",
  "verifier": "Qwen/Qwen3.5-2B+sft-direct-from-base-qwen3p5-2b-5895-samples_run1",
  "tools": "follow",
@@ -10,7 +10,7 @@
    "controller": "qwen/qwen3.8-flash",
    "command": "python -m agent.prompted --tools follow --claim-ids verifier/data/eval/fever-dev-900-ids.json --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
    "date": "2026-10-28",
-   "fever_score": 0.690,
+   "fever_score": 0.69,
    "sha256": "9903c1d5b067cfdeab22416f468736a3ed968c6b9013c770a0a7d987a88b839b"
   },
   "local-imitation-run1-follow.jsonl.gz": {
@@ -21,6 +21,26 @@
    "accuracy": 0.764,
    "seconds_per_claim": 10.87,
    "sha256": "7b70a714839dd0aa011acf47ec9254a09d211fd86e6f3649d412087008a8a537"
+  },
+  "local-grpo-ctl-300-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-300-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<300-claim GRPO run1 checkpoints> verifier/evaluation/eval_controller.sbatch (python -m agent.prompted --tools follow --chunk 64 --controller local:<imitation>,<grpo> --adapter <5895 run1> --claim-ids verifier/data/eval/fever-dev-900-ids.json)",
+   "date": "2026-11-03",
+   "slurm_job": 1064145,
+   "n": 900,
+   "fever_score": 0.681,
+   "accuracy": 0.763,
+   "sha256": "917f0c0e30a3d08496c287966d744f4a8aa325cfd2371171d4434cd08a14e3d4"
+  },
+  "local-grpo-ctl-1000-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<1000-claim GRPO run1 checkpoints> verifier/evaluation/eval_controller.sbatch (python -m agent.prompted --tools follow --chunk 64 --controller local:<imitation>,<grpo> --adapter <5895 run1> --claim-ids verifier/data/eval/fever-dev-900-ids.json)",
+   "date": "2026-11-03",
+   "slurm_job": 1064146,
+   "n": 900,
+   "fever_score": 0.687,
+   "accuracy": 0.764,
+   "sha256": "cc709e895f27509b872f79b1491f866ccee66e6f5271ef1eacdb31b27d97e2a7"
   }
  },
  "format": "trace schema 3 (verifier/docs/trace-format.md)",
