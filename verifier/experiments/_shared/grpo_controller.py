@@ -322,6 +322,12 @@ def main(defaults=None):
     ap.add_argument("--verify-batch", type=int, default=16)
     ap.add_argument("--save-steps", type=int, default=25)
     ap.add_argument("--rollouts-only", action="store_true", help="pilot: sample and score, no update")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue this run from artifacts/resume if present (start it if absent; exit if finished)")
+    ap.add_argument("--resume-every", type=int, default=5, help="save the full resume state every N steps")
+    ap.add_argument("--time-budget", type=int, default=0,
+                    help="seconds this process may run; stops cleanly with a resume state before it runs out")
+    ap.add_argument("--stop-after", type=int, default=0, help="stop cleanly after N steps in this process (tests)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--run-name", required=True)
     ap.add_argument("--config-name", default=None)
@@ -330,10 +336,21 @@ def main(defaults=None):
         ap.set_defaults(**defaults)
     a = ap.parse_args()
 
+    job_start = time.time()
     artifacts = artifacts_dir("grpo", "", a.seed, a.run_name, a.output_root, a.config_name)
-    if artifacts.exists():
-        raise SystemExit(f"run already exists: {artifacts}; use a new --run-name")
-    (artifacts / "logs").mkdir(parents=True)
+    resume_dir = artifacts / "resume"
+    resuming = a.resume and (resume_dir / "state.pt").exists()
+    if (artifacts / "meta.json").exists() and a.resume:
+        print(f"run already finished: {artifacts}")
+        return
+    if artifacts.exists() and not resuming:
+        if not a.resume:
+            raise SystemExit(f"run already exists: {artifacts}; use a new --run-name, or --resume to continue it")
+        print(f"no resume state in {artifacts}: the previous job stopped before its first save; starting over")
+        for stale in (artifacts / "rollouts.jsonl", artifacts / "logs" / "train_log.json"):
+            if stale.exists():
+                stale.unlink()
+    (artifacts / "logs").mkdir(parents=True, exist_ok=True)
 
     import torch
     claims = train_claims(a.n_train, a.train_seed)
@@ -350,13 +367,40 @@ def main(defaults=None):
                 "controller_prompt": CONTROLLER_PROMPT + "-follow", "tools": "follow", "final_rule": FINAL_RULE,
                 "train_claims": {"n": a.n_train, "seed": a.train_seed}}
 
-    log, all_rewards, fever_differ = [], [], 0
-    pool = ThreadPoolExecutor(4)
-    t_start = time.time()
+    log, all_rewards, fever_differ, done, prior_seconds = [], [], 0, 0, 0.0
     n_steps = math.ceil(len(claims) / a.claims_per_step)
     roll_path = artifacts / "rollouts.jsonl"
+    if resuming:
+        from peft import set_peft_model_state_dict
+        from safetensors.torch import load_file
+        set_peft_model_state_dict(policy.model, load_file(str(resume_dir / "adapter_model.safetensors")))
+        state = torch.load(resume_dir / "state.pt", weights_only=False)
+        optimizer.load_state_dict(state["optimizer"])
+        done, log, all_rewards = state["step"], state["log"], state["all_rewards"]
+        fever_differ, policy.calls, prior_seconds = state["fever_differ"], state["calls"], state["train_seconds"]
+        if roll_path.exists():  # drop rollouts of a step that ran after the last saved state
+            keep = done * a.claims_per_step
+            with open(roll_path, encoding="utf-8") as f:
+                lines = [l for l in f if json.loads(l)["group"] < keep]
+            with open(roll_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+        print(f"resumed {artifacts} after step {done} of {n_steps}")
+
+    def save_state(step, seconds):
+        tmp = artifacts / "resume.tmp"
+        policy.model.save_pretrained(tmp)
+        torch.save({"step": step, "optimizer": optimizer.state_dict(), "log": log, "all_rewards": all_rewards,
+                    "fever_differ": fever_differ, "calls": policy.calls, "train_seconds": seconds},
+                   tmp / "state.pt")
+        if resume_dir.exists():
+            import shutil
+            shutil.rmtree(resume_dir)
+        tmp.rename(resume_dir)  # replace the previous state only once the new one is complete
+
+    pool = ThreadPoolExecutor(4)
+    t_start = time.time()
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
-    for step in range(1, n_steps + 1):
+    for step in range(done + 1, n_steps + 1):
         t0 = time.time()
         batch = claims[(step - 1) * a.claims_per_step:step * a.claims_per_step]
         rows, records = rollout(batch, a.group_size, policy, search, verify, decomposer, run_info, pool)
@@ -394,8 +438,17 @@ def main(defaults=None):
         print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in entry.items()}), flush=True)
         if not a.rollouts_only and a.save_steps and step % a.save_steps == 0:
             policy.model.save_pretrained(artifacts / "checkpoints" / f"checkpoint-{step}")
+        out_of_time = step < n_steps and (
+            (a.time_budget and time.time() - job_start + 1.5 * entry["step_seconds"] + 120 > a.time_budget)
+            or (a.stop_after and step - done >= a.stop_after))
+        if not a.rollouts_only and (out_of_time or (a.resume_every and step % a.resume_every == 0)):
+            save_state(step, prior_seconds + time.time() - t_start)
+        if out_of_time:
+            print(f"stopping after step {step} of {n_steps} for the time budget; rerun with --resume", flush=True)
+            pool.shutdown()
+            return
 
-    secs = time.time() - t_start
+    secs = prior_seconds + time.time() - t_start
     if not a.rollouts_only:
         policy.model.save_pretrained(artifacts / "checkpoints")
         policy.tok.save_pretrained(artifacts / "checkpoints")
