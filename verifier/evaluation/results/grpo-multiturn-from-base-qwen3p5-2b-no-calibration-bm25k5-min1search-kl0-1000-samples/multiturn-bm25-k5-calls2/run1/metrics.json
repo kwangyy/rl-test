@@ -1,0 +1,270 @@
+{
+ "model": "Qwen/Qwen3.5-2B+grpo-multiturn-from-base-qwen3p5-2b-no-calibration-bm25k5-min1search-kl0-1000-samples_run1",
+ "retrieval": "agent-bm25-p3-k5-calls2",
+ "prompt_style": "multiturn",
+ "all": {
+  "n": 900,
+  "accuracy": 0.3333333333333333,
+  "format_rate": 1.0,
+  "fever_score": 0.20444444444444446,
+  "evidence_f1_non_nei": 0.6401971268800979,
+  "recall": {
+   "SUPPORTED": 0.0,
+   "REFUTED": 1.0,
+   "NOT_ENOUGH_INFO": 0.0
+  },
+  "harm_weighted_error": 0.6666666666666666,
+  "nei_precision": null,
+  "calibration": {
+   "stated_conf": {
+    "n": 900,
+    "coverage": 1.0,
+    "brier": 0.6666666666666666,
+    "ece": 0.6666666666666667,
+    "risk_at_coverage": {
+     "0.5": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     },
+     "0.8": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     },
+     "1.0": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     }
+    }
+   },
+   "token_conf": {
+    "n": 900,
+    "coverage": 1.0,
+    "brier": 0.6666666666666666,
+    "ece": 0.6666666666666667,
+    "risk_at_coverage": {
+     "0.5": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     },
+     "0.8": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     },
+     "1.0": {
+      "coverage": 1.0,
+      "risk": 0.6666666666666667,
+      "threshold": 1.0
+     }
+    }
+   }
+  }
+ },
+ "strata": {
+  "gold_in_context": {
+   "n": 446,
+   "accuracy": 0.5,
+   "format_rate": 1.0,
+   "fever_score": 0.4125560538116592,
+   "evidence_f1_non_nei": 0.8146271059046454,
+   "recall": {
+    "SUPPORTED": 0.0,
+    "REFUTED": 1.0,
+    "NOT_ENOUGH_INFO": null
+   },
+   "harm_weighted_error": 0.5,
+   "nei_precision": null,
+   "calibration": {
+    "stated_conf": {
+     "n": 446,
+     "coverage": 1.0,
+     "brier": 0.5,
+     "ece": 0.5,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      }
+     }
+    },
+    "token_conf": {
+     "n": 446,
+     "coverage": 1.0,
+     "brier": 0.5,
+     "ece": 0.5,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      }
+     }
+    }
+   }
+  },
+  "gold_not_in_context": {
+   "n": 154,
+   "accuracy": 0.5,
+   "format_rate": 1.0,
+   "fever_score": 0.0,
+   "evidence_f1_non_nei": 0.13502978502978502,
+   "recall": {
+    "SUPPORTED": 0.0,
+    "REFUTED": 1.0,
+    "NOT_ENOUGH_INFO": null
+   },
+   "harm_weighted_error": 0.5,
+   "nei_precision": null,
+   "calibration": {
+    "stated_conf": {
+     "n": 154,
+     "coverage": 1.0,
+     "brier": 0.5,
+     "ece": 0.5,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      }
+     }
+    },
+    "token_conf": {
+     "n": 154,
+     "coverage": 1.0,
+     "brier": 0.5,
+     "ece": 0.5,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 0.5,
+       "threshold": 1.0
+      }
+     }
+    }
+   }
+  },
+  "gold_nei": {
+   "n": 300,
+   "accuracy": 0.0,
+   "format_rate": 1.0,
+   "fever_score": 0.0,
+   "evidence_f1_non_nei": null,
+   "recall": {
+    "SUPPORTED": null,
+    "REFUTED": null,
+    "NOT_ENOUGH_INFO": 0.0
+   },
+   "harm_weighted_error": 1.0,
+   "nei_precision": null,
+   "calibration": {
+    "stated_conf": {
+     "n": 300,
+     "coverage": 1.0,
+     "brier": 1.0,
+     "ece": 1.0,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      }
+     }
+    },
+    "token_conf": {
+     "n": 300,
+     "coverage": 1.0,
+     "brier": 1.0,
+     "ece": 1.0,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      },
+      "0.8": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      },
+      "1.0": {
+       "coverage": 1.0,
+       "risk": 1.0,
+       "threshold": 1.0
+      }
+     }
+    }
+   }
+  }
+ },
+ "mean_tokens_in": 1283.4844444444445,
+ "mean_tokens_out": 58.885555555555555,
+ "reasoning_present_rate": null,
+ "reasoning_valid_citations_rate": null,
+ "multiturn": {
+  "searches_per_claim": 1.0,
+  "search_counts": {
+   "0": 0,
+   "1": 900,
+   "2": 0
+  },
+  "refused_rate": 0.0,
+  "ended_on_tool_call_rate": 0.0,
+  "gold_in_context_non_nei": 0.7433333333333333
+ }
+}
