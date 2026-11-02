@@ -65,7 +65,25 @@ reward − group mean without std scaling.
 
 Config `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-300-samples`, run
 `run1`, job 1059669 (A100-40). 300 claims (seed 4) × 8 rollouts, 38 updates, lr 1e-5.
-Check (handover): train reward rises and the invalid-output rate does not. *Running.*
+Check (handover): train reward rises and the invalid-output rate does not.
+
+Completed in 2 h 05 min of training (job 1059669, peak 18.5 GB). 60 of 300 claims had FEVER
+spread across their rollouts; 11 decompose calls had no cached split.
+
+| Steps | Train reward | Sampled FEVER | Actions | Invalid replies | Abstain | KL |
+|---|---:|---:|---:|---:|---:|---:|
+| 1–20 | 0.620 | 0.674 | 3.86 | 0.63% | 14.3% | 0.0003 |
+| 21–38 | 0.567 | 0.621 | 3.90 | 0.62% | 14.7% | 0.0007 |
+
+The invalid-output rate does not rise. The train reward does not clearly rise either; each
+step trains on different claims, so windows differ mostly by claim difficulty. KL to the
+imitation controller stays below 0.001, so after 38 updates at lr 1e-5 the policy has moved
+very little. Dev 900 evaluation: jobs 1060509/1060510.
+
+### Full run: 1,000 claims
+
+Config `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-1000-samples`, run
+`run1`, chain 1059772–1059775, dev 900 evaluation 1059789/1059790 after it. *Running.*
 
 ## Running on SoC
 
