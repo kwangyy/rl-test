@@ -135,6 +135,57 @@ updates carried little outcome signal. This is consistent with `controller-statu
 most remaining misses are the verifier's, and the controller's own share (63 of 279 flash misses)
 leaves little for a better controller to recover.
 
+## Follow-ups: making the policy move
+
+Both use the same reward, beta 0.04 and resumable chain as above; only unused train claims.
+
+- **A** `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/run1`:
+  the 1,000-claim run (same claims, seed 5) at lr 5e-5 instead of 1e-5. Jobs 1064778–1064781, eval 1064782.
+- **B** `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-spread2ep-250-samples/run1`:
+  only the 250 train claims whose 8 rollouts disagreed on FEVER in the three runs above, two
+  shuffled passes (63 updates), lr 5e-5. Jobs 1064783–1064785, eval 1064786.
+
+KL to the imitation controller reached 0.004–0.0075 (A) and 0.010–0.011 (B), against ≤ 0.002 before.
+
+| Controller (dev 900) | FEVER | Accuracy | Recall S / R / NEI | Actions | Abstain | Same verdict as imitation |
+|---|---:|---:|---|---:|---:|---:|
+| Imitation (start) | 0.684 | 0.764 | 0.85 / 0.76 / 0.69 | 3.70 | 16.1% | |
+| Flash | 0.690 | 0.781 | 0.88 / 0.75 / 0.71 | 3.88 | 11.1% | |
+| GRPO 1,000, lr 1e-5 | 0.687 | 0.764 | 0.86 / 0.75 / 0.68 | 3.63 | 21.1% | 97.7% |
+| **A: GRPO 1,000, lr 5e-5** | **0.700** | **0.779** | 0.86 / 0.76 / 0.71 | 3.66 | 10.0% | 95.1% |
+| B: GRPO on spread claims, lr 5e-5 | 0.693 | 0.769 | 0.86 / 0.75 / 0.69 | 3.67 | 20.3% | 94.8% |
+
+| Exact McNemar on FEVER | Only first right / only second right | p |
+|---|---:|---:|
+| A vs imitation | 30 / 16 | 0.054 |
+| A vs flash | 41 / 32 | 0.35 |
+| B vs imitation | 31 / 23 | 0.34 |
+
+A is the best controller so far: +1.6 FEVER points over imitation and +1.0 over flash, with
+abstaining down from 16% to 10% and NEI recall up (0.69 → 0.71). Against imitation it is
+borderline (p = 0.054), one seed, on dev claims that earlier prompt work also used, and one of
+several comparisons; confirm on the holdout and with a second seed before calling it a gain.
+
+## Why the gains are small
+
+Imitation's 284 FEVER misses on dev 900, by where the gold evidence went:
+
+| Miss | Claims | Whose |
+|---|---:|---|
+| Gold evidence was in the verifier's input; verdict or citation wrong | 130 | verifier |
+| Gold label NEI, final answer SUPPORTED or REFUTED | 94 | mostly verifier |
+| Gold evidence never retrieved | 54 | controller and retrieval |
+| Search found the gold evidence, never sent to the verifier | 6 | controller |
+
+At most 60 misses (21%) depend on the controller's choices, so a perfect controller could add
+about 6.7 points and a realistic one far less. The other 224 are the frozen verifier's.
+
+Disagreements with imitation run in both directions: GRPO 1,000 at lr 1e-5 gained 12 claims and
+lost 10. Most flips come from a different search query (the same action sequence, e.g.
+search–verify–commit, retrieving different sentences) or from GRPO searching once more and the
+verifier then answering differently. The verifier's answer to slightly different evidence is
+noisy, so a controller change moves claims both ways, and only the net count reflects learning.
+
 Possible next runs, not done: a higher learning rate (about 5e-5) or lower beta so the policy
 actually moves; training only on the claims with FEVER spread; or rewarding against the
 controller-attributable failures (gold retrieved but never sent to the verifier).

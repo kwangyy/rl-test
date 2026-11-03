@@ -41,6 +41,26 @@
    "fever_score": 0.687,
    "accuracy": 0.764,
    "sha256": "cc709e895f27509b872f79b1491f866ccee66e6f5271ef1eacdb31b27d97e2a7"
+  },
+  "local-grpo-ctl-lr5e5-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run1 checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1064782,
+   "n": 900,
+   "fever_score": 0.7,
+   "accuracy": 0.779,
+   "sha256": "479b0b5b3be1280ff29eed82049e5e8b999826aa8910cd5df7b2def4ca72210d"
+  },
+  "local-grpo-ctl-lr5e5-spread250-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-spread2ep-250-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run1 checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1064786,
+   "n": 900,
+   "fever_score": 0.693,
+   "accuracy": 0.769,
+   "sha256": "a2cb049eaa2aa9c2e9319e8f6d3cad2e86c2b264c43a8c179ed55ebe2f4e7a41"
   }
  },
  "format": "trace schema 3 (verifier/docs/trace-format.md)",
