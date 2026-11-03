@@ -60,10 +60,20 @@ def n_invalid(row):
     return sum(not s["controller"]["valid"] for s in row["steps"] if "controller" in s)
 
 
-def rollout_reward(row, ops_cost, invalid_penalty):
-    """FEVER (0/1) minus the per-operation cost and the invalid-output penalty."""
+def delivered_gold(row):
+    """True when a full gold evidence set was in the input of some verify call: the part of the
+    outcome the controller itself controls (search and follow found it, verify passed it on)."""
+    if row["gold"] == NEI:
+        return False
+    inputs = [set(s["args"].get("evidence") or []) for s in row["steps"] if s["action"] == "verify"]
+    return any(set(g) <= e for g in row["gold_evidence"] for e in inputs)
+
+
+def rollout_reward(row, ops_cost, invalid_penalty, evidence_bonus=0.0):
+    """FEVER (0/1) minus the per-operation cost and the invalid-output penalty, plus
+    evidence_bonus when the gold evidence reached the verifier (non-NEI claims only)."""
     return (float(fever_ok(row)) - ops_cost * row["cost"]["n_ops"]
-            - invalid_penalty * n_invalid(row))
+            - invalid_penalty * n_invalid(row) + evidence_bonus * float(delivered_gold(row)))
 
 
 def group_advantages(rewards, group_size, scale_std=True, eps=1e-4):
@@ -341,6 +351,8 @@ def main(defaults=None):
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--ops-cost", type=float, default=0.01, help="lambda per search/follow/decompose/verify")
     ap.add_argument("--invalid-penalty", type=float, default=0.5, help="per invalid controller reply")
+    ap.add_argument("--evidence-bonus", type=float, default=0.0,
+                    help="added when a gold evidence set reached a verify call (0 = FEVER-only reward)")
     ap.add_argument("--no-std-scale", action="store_true", help="advantage = reward - group mean only")
     ap.add_argument("--lr", type=float, default=1e-5)
     ap.add_argument("--beta", type=float, default=0.04, help="KL to the imitation controller")
@@ -445,7 +457,7 @@ def main(defaults=None):
         batch = claims[(step - 1) * a.claims_per_step:step * a.claims_per_step]
         rows, records = rollout(batch, a.group_size, policy, search, verify, decomposer, run_info, pool)
         t_roll = time.time() - t0
-        rewards = [rollout_reward(r, a.ops_cost, a.invalid_penalty) for r in rows]
+        rewards = [rollout_reward(r, a.ops_cost, a.invalid_penalty, a.evidence_bonus) for r in rows]
         adv = group_advantages(rewards, a.group_size, scale_std=not a.no_std_scale)
         stats = {"loss": 0.0, "kl": 0.0, "grad_norm": 0.0, "n_seqs": 0, "n_tokens": 0}
         if not a.rollouts_only:
@@ -463,6 +475,7 @@ def main(defaults=None):
                  "frac_reward_zero_std": 1 - sp["frac_with_spread"],
                  "frac_fever_spread": fever_spread(rows, a.group_size) / len(batch),
                  "fever": mean([fever_ok(r) for r in rows]),
+                 "gold_delivered": mean([delivered_gold(r) for r in rows]),
                  "accuracy": mean([r["final"]["verdict"] == r["gold"] for r in rows]),
                  "n_ops": mean([r["cost"]["n_ops"] for r in rows]),
                  "n_search": mean([r["cost"]["n_search"] for r in rows]),
@@ -497,7 +510,7 @@ def main(defaults=None):
             "spread": {**spread_summary(all_rewards, a.group_size), "claims_with_fever_spread": fever_differ},
             "mean_reward": mean(all_rewards), "decompose_uncached": decomposer.missing,
             "train_seconds": round(secs), "peak_gpu_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),
-            "reward": "fever - ops_cost*n_ops - invalid_penalty*n_invalid"}
+            "reward": "fever - ops_cost*n_ops - invalid_penalty*n_invalid + evidence_bonus*gold_delivered"}
     with open(artifacts / "meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1)
     print(json.dumps({k: v for k, v in meta.items() if k != "claim_ids"}, indent=1))

@@ -54,3 +54,18 @@ def test_spread_claim_ids_keeps_mixed_groups_once(tmp_path):
     a.write_text("".join(json.dumps(r) + "\n" for r in rows_a))
     b.write_text("".join(json.dumps(r) + "\n" for r in rows_b))
     assert spread_claim_ids([a, b]) == [1, 3]
+
+
+def test_evidence_bonus_only_when_gold_reached_the_verifier():
+    from verifier.experiments._shared.grpo_controller import delivered_gold
+    r = row("SUPPORTED", "REFUTED", ["A:1"], n_ops=2)
+    r["steps"].append({"action": "verify", "args": {"evidence": ["B:2", "A:1"]}})
+    assert delivered_gold(r)
+    assert abs(rollout_reward(r, 0.01, 0.5, 0.3) - (0.3 - 0.02)) < 1e-9
+    assert abs(rollout_reward(r, 0.01, 0.5) + 0.02) < 1e-9  # default: FEVER-only, unchanged
+    miss = row("SUPPORTED", "SUPPORTED", ["A:1"], gold_evidence=(("A:1", "C:4"),))
+    miss["steps"].append({"action": "verify", "args": {"evidence": ["A:1"]}})
+    assert not delivered_gold(miss)
+    nei = row("NOT_ENOUGH_INFO", "NOT_ENOUGH_INFO", gold_evidence=())
+    nei["steps"].append({"action": "verify", "args": {"evidence": ["A:1"]}})
+    assert not delivered_gold(nei)

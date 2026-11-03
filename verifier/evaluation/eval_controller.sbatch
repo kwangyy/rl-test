@@ -25,6 +25,8 @@ dec=verifier/data/decompose
 tagged=$dec/fever_dev_qwen_qwen3.8-flash_n900_promptv2_fever-dev-900-ids-ac9cfead.jsonl
 [[ -f "$tagged" ]] || cp "$dec/fever_dev_qwen_qwen3.8-flash_n900_promptv2.jsonl" "$tagged"
 echo "job=$SLURM_JOB_ID commit=$(git rev-parse HEAD) node=$(hostname) controller=$CONTROLLER"
-python -m agent.prompted --tools follow --chunk 64 --controller "$CONTROLLER" \
+# CLAIM_IDS: default the frozen dev 900; verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json for
+# the holdout (finalized configurations only). The offline wrapper never calls the decomposer API.
+python -m verifier.evaluation.eval_controller_offline --tools follow --chunk 64 --controller "$CONTROLLER" \
   --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints \
-  --claim-ids verifier/data/eval/fever-dev-900-ids.json
+  --claim-ids "${CLAIM_IDS:-verifier/data/eval/fever-dev-900-ids.json}"
