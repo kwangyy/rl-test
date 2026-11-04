@@ -61,6 +61,36 @@
    "fever_score": 0.693,
    "accuracy": 0.769,
    "sha256": "a2cb049eaa2aa9c2e9319e8f6d3cad2e86c2b264c43a8c179ed55ebe2f4e7a41"
+  },
+  "local-grpo-ctl-lr5e5-1000-run2-seed1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/runs/run2-seed1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1066355,
+   "n": 900,
+   "fever_score": 0.691,
+   "accuracy": 0.766,
+   "sha256": "f4e3c3a7ddba57211849748269b0122c209ebc58906b9b8eeb275a626cb637dd"
+  },
+  "local-grpo-ctl-lr1e4-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr1e4-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-04",
+   "slurm_job": 1067815,
+   "n": 900,
+   "fever_score": 0.687,
+   "accuracy": 0.764,
+   "sha256": "792e8017984b2d048a40dfd55734e8fa11013466b87f48b4ee1a238a01e716fe"
+  },
+  "local-grpo-ctl-evbonus03-lr5e5-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-evbonus03-nostd-lr5e5-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-04",
+   "slurm_job": 1067827,
+   "n": 900,
+   "fever_score": 0.682,
+   "accuracy": 0.76,
+   "sha256": "dc0d480e94b33b9fbef9d0d8e3ad5306935b452ba595f248aad0173f3b3e5e2c"
   }
  },
  "format": "trace schema 3 (verifier/docs/trace-format.md)",

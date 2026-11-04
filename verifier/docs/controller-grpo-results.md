@@ -39,6 +39,7 @@ Code: `verifier/experiments/_shared/grpo_controller.py`; tests:
 | Resume state (LoRA + optimizer) | `.../runs/<run>/artifacts/resume/` | no |
 | Dev 900 traces | `verifier/data/controller/dev900-follow-controller-traces/<name>.jsonl.gz` + `manifest.json` entry | yes, gzipped |
 | Slurm logs | SoC only | no |
+| Holdout 3,000 traces (imitation and run A, one evaluation each) | `verifier/data/controller/holdout3000-follow-controller-traces/<name>.jsonl.gz` + `manifest.json` | yes, gzipped |
 
 ## Runs
 
@@ -189,6 +190,74 @@ noisy, so a controller change moves claims both ways, and only the net count ref
 Possible next runs, not done: a higher learning rate (about 5e-5) or lower beta so the policy
 actually moves; training only on the claims with FEVER spread; or rewarding against the
 controller-attributable failures (gold retrieved but never sent to the verifier).
+
+## Second seed, higher learning rate, evidence bonus and holdout
+
+Three more 1,000-claim runs with run A's claims, reward, beta 0.04 and 125 updates; one setting
+changed in each. All dev 900 traces are in `dev900-follow-controller-traces/`.
+
+- **A2** `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/run2-seed1`:
+  run A with `seed` 1. Jobs 1066351–1066354, eval 1066355.
+- **C** `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr1e4-kl004-1000-samples/run1`:
+  lr 1e-4. Jobs 1067811–1067814, eval 1067815.
+- **D** `grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-evbonus03-nostd-lr5e5-kl004-1000-samples/run1`:
+  run A plus `--evidence-bonus 0.3`: reward FEVER − 0.01 × actions − 0.5 × invalid + 0.3 when a
+  full gold evidence set was in the input of some verify call (commit 5683e59). Jobs
+  1067823–1067826, eval 1067827.
+
+Final KL to the imitation controller: about 0.005 (A2), 0.013–0.018 (C), 0.004–0.007 (D).
+
+"Gold delivered" is the share of non-NEI claims where a full gold evidence set reached a verify
+call. The last two columns compare each run with imitation on the same claims (exact McNemar on
+FEVER).
+
+| Controller (dev 900) | FEVER | Accuracy | Recall S / R / NEI | Abstain | Gold delivered | Same verdict as imitation | Only imitation / only run right | p |
+|---|---:|---:|---|---:|---:|---:|---:|---:|
+| Imitation (start) | 0.684 | 0.764 | 0.85 / 0.76 / 0.69 | 16.1% | 90.0% | | | |
+| A: lr 5e-5 | 0.700 | 0.779 | 0.86 / 0.76 / 0.71 | 10.0% | 91.2% | 95.1% | 16 / 30 | 0.054 |
+| A2: lr 5e-5, second seed | 0.691 | 0.766 | 0.86 / 0.75 / 0.69 | 14.8% | 90.7% | 96.6% | 15 / 21 | 0.41 |
+| C: lr 1e-4 | 0.687 | 0.764 | 0.86 / 0.75 / 0.69 | 9.3% | 88.8% | 94.2% | 28 / 30 | 0.90 |
+| D: lr 5e-5 + 0.3 evidence bonus | 0.682 | 0.760 | 0.85 / 0.74 / 0.69 | 19.8% | 89.7% | 95.3% | 23 / 21 | 0.88 |
+
+- **Seed.** A2 lands at 0.691 against A's 0.700 (A2 vs A: 12 / 20 claims, p = 0.22). Across the
+  two seeds lr 5e-5 adds about one FEVER point over imitation, and neither seed is significant.
+- **Learning rate.** At 1e-4 the policy moves further (KL about three times A's) but gains and
+  losses cancel (30 / 28).
+- **Evidence bonus.** No effect. In D's 8,000 training rollouts (1,000 claims × 8), 511 of the
+  667 non-NEI claims delivered the gold evidence in all 8 rollouts and 37 in none, so the bonus
+  was constant within those groups. In 68 of the remaining 119 claims FEVER already varied, and
+  a rollout without the gold evidence never scored FEVER (0 of 636), so the bonus pointed the same
+  way as the FEVER reward. Only 51 claims got a new signal, and in all of them every rollout was
+  FEVER-wrong: the bonus rewarded delivering evidence that the verifier then misjudged. The
+  imitation controller already delivers the gold evidence on 90% of non-NEI claims, so the term
+  measures something the policy rarely gets wrong.
+
+### Holdout 3,000
+
+The holdout is `verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json`, frozen in commit
+2251e86 (`fever-evaluation-v1`, see its `manifest.json`): 1,000 claims per label drawn with seed 0
+from the official FEVER shared-task dev set, after removing every dev claim already used in project
+records (including the dev 900) and claims whose normalized text matches train or used claims. Its
+policy is "evaluate finalized configurations only". Run A was chosen on dev 900 before the holdout
+was opened, and only imitation and A were evaluated on it, once each (jobs 1067828 and 1072154),
+with `verifier.evaluation.eval_controller_offline` (no decomposer API calls; no claim needed one).
+Flash was not run: SoC has no API key.
+
+| Controller (holdout 3,000) | FEVER | Accuracy | Recall S / R / NEI | Abstain | Gold delivered | Same verdict | Only imitation / only A right | p |
+|---|---:|---:|---|---:|---:|---:|---:|---:|
+| Imitation | 0.673 | 0.763 | 0.87 / 0.74 / 0.68 | 16.3% | 88.9% | | | |
+| A: lr 5e-5 | 0.678 | 0.765 | 0.86 / 0.75 / 0.68 | 12.1% | 90.0% | 96.5% | 49 / 65 | 0.16 |
+
+On unseen claims A is +0.5 FEVER points over imitation, not significant. Its dev gain (+1.6) was
+partly the luck of one seed and of a dev set used to pick it. Controller GRPO from the imitation
+adapter, with this reward and this frozen verifier, gives at most about one FEVER point.
+
+**Conclusion.** The imitation controller already does most of the controller's job: it delivers
+the gold evidence on about 90% of non-NEI claims, and most remaining misses are the verifier's
+(see "Why the gains are small"). Learning rate, seed and an evidence-delivery reward do not change
+that. Larger gains need a better verifier on the evidence this controller passes it, better NEI
+handling (the lowest recall, 0.68–0.69), or better retrieval for the claims whose gold evidence
+is never found, rather than more controller GRPO tuning.
 
 ## Running on SoC
 
