@@ -1,5 +1,5 @@
 {
- "description": "Dev 900 traces of the prompted loop (follow tools, 5895 verifier) under two controllers: qwen3.8-flash, and the 2B imitation controller trained on flash's train trajectories. Baselines for controller GRPO.",
+ "description": "Dev 900 traces of the prompted loop (follow tools, 5895 verifier) under two controllers: qwen3.8-flash, and the 2B imitation controller trained on flash's train trajectories. Baselines for controller GRPO, and two controller GRPO runs from the imitation controller (300 and 1,000 train claims).",
  "claim_ids": "verifier/data/eval/fever-dev-900-ids.json",
  "verifier": "Qwen/Qwen3.5-2B+sft-direct-from-base-qwen3p5-2b-5895-samples_run1",
  "tools": "follow",
@@ -10,7 +10,7 @@
    "controller": "qwen/qwen3.8-flash",
    "command": "python -m agent.prompted --tools follow --claim-ids verifier/data/eval/fever-dev-900-ids.json --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
    "date": "2026-10-28",
-   "fever_score": 0.690,
+   "fever_score": 0.69,
    "sha256": "9903c1d5b067cfdeab22416f468736a3ed968c6b9013c770a0a7d987a88b839b"
   },
   "local-imitation-run1-follow.jsonl.gz": {
@@ -21,6 +21,76 @@
    "accuracy": 0.764,
    "seconds_per_claim": 10.87,
    "sha256": "7b70a714839dd0aa011acf47ec9254a09d211fd86e6f3649d412087008a8a537"
+  },
+  "local-grpo-ctl-300-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-300-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<300-claim GRPO run1 checkpoints> verifier/evaluation/eval_controller.sbatch (python -m agent.prompted --tools follow --chunk 64 --controller local:<imitation>,<grpo> --adapter <5895 run1> --claim-ids verifier/data/eval/fever-dev-900-ids.json)",
+   "date": "2026-11-03",
+   "slurm_job": 1064145,
+   "n": 900,
+   "fever_score": 0.681,
+   "accuracy": 0.763,
+   "sha256": "917f0c0e30a3d08496c287966d744f4a8aa325cfd2371171d4434cd08a14e3d4"
+  },
+  "local-grpo-ctl-1000-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<1000-claim GRPO run1 checkpoints> verifier/evaluation/eval_controller.sbatch (python -m agent.prompted --tools follow --chunk 64 --controller local:<imitation>,<grpo> --adapter <5895 run1> --claim-ids verifier/data/eval/fever-dev-900-ids.json)",
+   "date": "2026-11-03",
+   "slurm_job": 1064146,
+   "n": 900,
+   "fever_score": 0.687,
+   "accuracy": 0.764,
+   "sha256": "cc709e895f27509b872f79b1491f866ccee66e6f5271ef1eacdb31b27d97e2a7"
+  },
+  "local-grpo-ctl-lr5e5-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run1 checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1064782,
+   "n": 900,
+   "fever_score": 0.7,
+   "accuracy": 0.779,
+   "sha256": "479b0b5b3be1280ff29eed82049e5e8b999826aa8910cd5df7b2def4ca72210d"
+  },
+  "local-grpo-ctl-lr5e5-spread250-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-spread2ep-250-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run1 checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1064786,
+   "n": 900,
+   "fever_score": 0.693,
+   "accuracy": 0.769,
+   "sha256": "a2cb049eaa2aa9c2e9319e8f6d3cad2e86c2b264c43a8c179ed55ebe2f4e7a41"
+  },
+  "local-grpo-ctl-lr5e5-1000-run2-seed1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/runs/run2-seed1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1066355,
+   "n": 900,
+   "fever_score": 0.691,
+   "accuracy": 0.766,
+   "sha256": "f4e3c3a7ddba57211849748269b0122c209ebc58906b9b8eeb275a626cb637dd"
+  },
+  "local-grpo-ctl-lr1e4-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr1e4-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-04",
+   "slurm_job": 1067815,
+   "n": 900,
+   "fever_score": 0.687,
+   "accuracy": 0.764,
+   "sha256": "792e8017984b2d048a40dfd55734e8fa11013466b87f48b4ee1a238a01e716fe"
+  },
+  "local-grpo-ctl-evbonus03-lr5e5-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-evbonus03-nostd-lr5e5-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints> verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-04",
+   "slurm_job": 1067827,
+   "n": 900,
+   "fever_score": 0.682,
+   "accuracy": 0.76,
+   "sha256": "dc0d480e94b33b9fbef9d0d8e3ad5306935b452ba595f248aad0173f3b3e5e2c"
   }
  },
  "format": "trace schema 3 (verifier/docs/trace-format.md)",
