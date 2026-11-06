@@ -1,0 +1,270 @@
+{
+ "model": "Qwen/Qwen3.5-2B",
+ "retrieval": "agent-bm25-p3-k5-calls2",
+ "prompt_style": "multiturn",
+ "all": {
+  "n": 32,
+  "accuracy": 0.3125,
+  "format_rate": 0.6875,
+  "fever_score": 0.28125,
+  "evidence_f1_non_nei": 0.3543859649122807,
+  "recall": {
+   "SUPPORTED": 0.75,
+   "REFUTED": 0.2727272727272727,
+   "NOT_ENOUGH_INFO": 0.07692307692307693
+  },
+  "harm_weighted_error": 0.890625,
+  "nei_precision": 0.5,
+  "calibration": {
+   "stated_conf": {
+    "n": 22,
+    "coverage": 0.6875,
+    "brier": 0.5459090909090909,
+    "ece": 0.5409090909090908,
+    "risk_at_coverage": {
+     "0.5": {
+      "coverage": 0.59375,
+      "risk": 0.5789473684210527,
+      "threshold": 1
+     },
+     "0.8": {
+      "coverage": 0.59375,
+      "risk": 0.5789473684210527,
+      "threshold": 1
+     },
+     "1.0": {
+      "coverage": 0.6875,
+      "risk": 0.5454545454545454,
+      "threshold": 0
+     }
+    }
+   },
+   "token_conf": {
+    "n": 22,
+    "coverage": 0.6875,
+    "brier": 0.46276579500372056,
+    "ece": 0.4720589453990435,
+    "risk_at_coverage": {
+     "0.5": {
+      "coverage": 0.34375,
+      "risk": 0.4545454545454546,
+      "threshold": 0.9792610329839804
+     },
+     "0.8": {
+      "coverage": 0.5625,
+      "risk": 0.5555555555555556,
+      "threshold": 0.7714246725197019
+     },
+     "1.0": {
+      "coverage": 0.6875,
+      "risk": 0.5454545454545454,
+      "threshold": 0.5897098068887441
+     }
+    }
+   }
+  }
+ },
+ "strata": {
+  "gold_in_context": {
+   "n": 15,
+   "accuracy": 0.5333333333333333,
+   "format_rate": 0.6666666666666666,
+   "fever_score": 0.5333333333333333,
+   "evidence_f1_non_nei": 0.41555555555555557,
+   "recall": {
+    "SUPPORTED": 0.8333333333333334,
+    "REFUTED": 0.3333333333333333,
+    "NOT_ENOUGH_INFO": null
+   },
+   "harm_weighted_error": 0.5,
+   "nei_precision": 0.0,
+   "calibration": {
+    "stated_conf": {
+     "n": 10,
+     "coverage": 0.6666666666666666,
+     "brier": 0.101,
+     "ece": 0.09000000000000008,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.5333333333333333,
+       "risk": 0.125,
+       "threshold": 1
+      },
+      "0.8": {
+       "coverage": 0.5333333333333333,
+       "risk": 0.125,
+       "threshold": 1
+      },
+      "1.0": {
+       "coverage": 0.6666666666666666,
+       "risk": 0.19999999999999996,
+       "threshold": 0
+      }
+     }
+    },
+    "token_conf": {
+     "n": 10,
+     "coverage": 0.6666666666666666,
+     "brier": 0.1579821723350992,
+     "ece": 0.13528028297239555,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.3333333333333333,
+       "risk": 0.19999999999999996,
+       "threshold": 0.9989312853689376
+      },
+      "0.8": {
+       "coverage": 0.5333333333333333,
+       "risk": 0.125,
+       "threshold": 0.7714246725197019
+      },
+      "1.0": {
+       "coverage": 0.6666666666666666,
+       "risk": 0.19999999999999996,
+       "threshold": 0.5897098068887441
+      }
+     }
+    }
+   }
+  },
+  "gold_not_in_context": {
+   "n": 4,
+   "accuracy": 0.25,
+   "format_rate": 0.25,
+   "fever_score": 0.0,
+   "evidence_f1_non_nei": 0.125,
+   "recall": {
+    "SUPPORTED": 0.5,
+    "REFUTED": 0.0,
+    "NOT_ENOUGH_INFO": null
+   },
+   "harm_weighted_error": 0.75,
+   "nei_precision": null,
+   "calibration": {
+    "stated_conf": {
+     "n": 1,
+     "coverage": 0.25,
+     "brier": 0.0,
+     "ece": 0.0,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 1
+      },
+      "0.8": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 1
+      },
+      "1.0": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 1
+      }
+     }
+    },
+    "token_conf": {
+     "n": 1,
+     "coverage": 0.25,
+     "brier": 8.886812957905801e-09,
+     "ece": 9.426989422878229e-05,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 0.9999057301057712
+      },
+      "0.8": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 0.9999057301057712
+      },
+      "1.0": {
+       "coverage": 0.25,
+       "risk": 0.0,
+       "threshold": 0.9999057301057712
+      }
+     }
+    }
+   }
+  },
+  "gold_nei": {
+   "n": 13,
+   "accuracy": 0.07692307692307693,
+   "format_rate": 0.8461538461538461,
+   "fever_score": 0.07692307692307693,
+   "evidence_f1_non_nei": null,
+   "recall": {
+    "SUPPORTED": null,
+    "REFUTED": null,
+    "NOT_ENOUGH_INFO": 0.07692307692307693
+   },
+   "harm_weighted_error": 1.3846153846153846,
+   "nei_precision": 1.0,
+   "calibration": {
+    "stated_conf": {
+     "n": 11,
+     "coverage": 0.8461538461538461,
+     "brier": 1.0,
+     "ece": 1.0,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.7692307692307693,
+       "risk": 1.0,
+       "threshold": 1
+      },
+      "0.8": {
+       "coverage": 0.7692307692307693,
+       "risk": 1.0,
+       "threshold": 1
+      },
+      "1.0": {
+       "coverage": 0.8461538461538461,
+       "risk": 0.9090909090909091,
+       "threshold": 0
+      }
+     }
+    },
+    "token_conf": {
+     "n": 11,
+     "coverage": 0.8461538461538461,
+     "brier": 0.7819114325312772,
+     "ece": 0.8627035358099842,
+     "risk_at_coverage": {
+      "0.5": {
+       "coverage": 0.46153846153846156,
+       "risk": 1.0,
+       "threshold": 0.9520527056260686
+      },
+      "0.8": {
+       "coverage": 0.6923076923076923,
+       "risk": 1.0,
+       "threshold": 0.7866712123541858
+      },
+      "1.0": {
+       "coverage": 0.8461538461538461,
+       "risk": 0.9090909090909091,
+       "threshold": 0.6913952845442904
+      }
+     }
+    }
+   }
+  }
+ },
+ "mean_tokens_in": 2521.125,
+ "mean_tokens_out": 97.90625,
+ "reasoning_present_rate": null,
+ "reasoning_valid_citations_rate": null,
+ "multiturn": {
+  "searches_per_claim": 1.6875,
+  "search_counts": {
+   "0": 0,
+   "1": 10,
+   "2": 22
+  },
+  "refused_rate": 0.3125,
+  "ended_on_tool_call_rate": 0.3125,
+  "gold_in_context_non_nei": 0.7894736842105263
+ }
+}

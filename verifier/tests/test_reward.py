@@ -101,6 +101,37 @@ def test_ablation_no_calibration():
     assert r == 0.0
 
 
+def test_evidence_gate_off_by_default():
+    """Only the named GRPO ablation gates; FULL and the older ablations are unchanged."""
+    assert not R.FULL.evidence_gate
+    assert [k for k, c in R.ABLATIONS.items() if c.evidence_gate] == ["no_calibration_evidence_gated"]
+    _, parts = R.total(SUPPORTED, SUPPORTED, 1.0, ["a"], [], 0)
+    assert parts["correctness"] == 1.0
+
+
+def test_evidence_gate_needs_a_gold_sentence():
+    cfg = R.ABLATIONS["no_calibration_evidence_gated"]
+    guessed, parts = R.total(REFUTED, REFUTED, 1.0, ["a", "b"], ["x"], 1, cfg=cfg)
+    assert parts["correctness"] == 0.0
+    supported, parts = R.total(REFUTED, REFUTED, 1.0, ["a", "b"], ["a", "x"], 1, cfg=cfg)
+    assert parts["correctness"] == 1.0 and supported > guessed
+
+
+def test_evidence_gate_leaves_nei_and_wrong_verdicts_alone():
+    cfg = R.ABLATIONS["no_calibration_evidence_gated"]
+    plain = R.ABLATIONS["no_calibration"]
+    for args in [(NEI, NEI, 1.0, [], [], 1), (NEI, SUPPORTED, 1.0, [], [], 1), (SUPPORTED, REFUTED, 1.0, ["a"], [], 1)]:
+        assert R.total(*args, cfg=cfg) == R.total(*args, cfg=plain)
+
+
+def test_evidence_gate_guess_no_better_than_abstaining():
+    """The shortcut GRPO found: an unsupported right verdict no longer beats a wrong NEI."""
+    cfg = R.ABLATIONS["no_calibration_evidence_gated"]
+    guess, _ = R.total(REFUTED, REFUTED, 1.0, ["a"], [], 0, cfg=cfg)
+    abstain, _ = R.total(REFUTED, NEI, 1.0, ["a"], [], 0, cfg=cfg)
+    assert guess == abstain == 0.0
+
+
 def test_ablation_no_harm():
     cfg = R.ABLATIONS["no_harm"]
     lie, _ = R.total(REFUTED, SUPPORTED, 0.5, ["a"], [], 0, cfg=cfg)

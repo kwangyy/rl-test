@@ -45,7 +45,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from core import reward as R
 from utils.experiment_layout import artifacts_dir
 from utils.grpo_common import DEFAULT_SFT, FORMAT_FAIL, VERDICT
-from verifier.model import FEVER_LABEL, LOCAL_MODEL, MAX_CITED, SEED, gold_sets, parse, sample_claims
+from utils.fever_eval import assert_not_reserved
+from verifier.model import (DATA, FEVER_LABEL, LOCAL_MODEL, MAX_CITED, SEED, SPLIT_FILE, gold_sets, parse,
+                            sample_claims)
 
 
 SYSTEM = """You are a fact-checker. You get a claim. Use the search tool to find Wikipedia evidence, then decide whether the evidence SUPPORTS the claim, REFUTES it, or gives NOT_ENOUGH_INFO to decide. Use only evidence the tool returned.
@@ -88,6 +90,9 @@ class FeverSearchEnv:
     # TRL is given budget_grace extra iterations so the model still gets to reply.
     max_calls = 2
     budget_grace = 2
+    # Answers given after fewer real searches score FORMAT_FAIL (--min-searches). Without it,
+    # run1 from base stopped searching by step 17 and guessed REFUTED from the claim alone.
+    min_calls = 0
 
     LAST_SEARCH = "\n(That was your last search. Reply now with only the JSON object.)"
     ANSWER_NOW = "No searches left. Reply now with only the JSON object."
@@ -138,11 +143,30 @@ class FeverSearchEnv:
         return out
 
 
-def load_rows(n, max_calls):
-    """n balanced FEVER train claims, no evidence in the prompt."""
+def load_train_claims(data_dir):
+    """The FEVER train claims named by data_dir/labeled_prompts.jsonl, in file order.
+
+    Lets a multi-turn run use the exact claim IDs of a single-turn GRPO set
+    (for example fever-oracle-matched-grpo-1000); only the IDs are read.
+    """
+    with open(os.path.join(data_dir, "labeled_prompts.jsonl"), encoding="utf-8") as f:
+        ids = [int(json.loads(line)["id"]) for line in f]
+    wanted = set(ids)
+    with open(os.path.join(DATA, SPLIT_FILE["train"]), encoding="utf-8") as f:
+        by_id = {c["id"]: c for c in map(json.loads, f) if c["id"] in wanted}
+    missing = [i for i in ids if i not in by_id]
+    if missing:
+        raise SystemExit(f"{len(missing)} IDs from {data_dir} are not in FEVER train, e.g. {missing[:5]}")
+    claims = [by_id[i] for i in ids]
+    assert_not_reserved(claims, "multi-turn GRPO training")
+    return claims
+
+
+def load_rows(n, max_calls, train_data=None):
+    """n balanced FEVER train claims, or every claim in train_data; no evidence in the prompt."""
     system = SYSTEM.format(max_calls=max_calls)
     rows = []
-    for c in sample_claims(n, SEED, split="train"):
+    for c in load_train_claims(train_data) if train_data else sample_claims(n, SEED, split="train"):
         rows.append({
             "prompt": [{"role": "system", "content": system}, {"role": "user", "content": f"Claim: {c['claim']}"}],
             "claim": c["claim"],
@@ -157,7 +181,7 @@ def score_one(messages, env, gold, gold_ids, cfg, rng):
     last = messages[-1] if messages else {}
     text = last.get("content") or ""
     obj, ok = parse(text) if not last.get("tool_calls") else ({}, {"json": False})
-    if not all(ok.values()):
+    if not all(ok.values()) or env.n_search < env.min_calls:
         return FORMAT_FAIL, None
     cited = [env.shown[e] for e in obj["evidence"][:MAX_CITED] if e in env.shown]
     return R.total(gold, VERDICT[obj["verdict"]], float(obj["confidence"]), gold_ids, cited,
@@ -219,7 +243,8 @@ def train(a, out):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
 
-    ds = Dataset.from_list(load_rows(a.n_train, a.max_calls))
+    ds = Dataset.from_list(load_rows(a.n_train, a.max_calls, a.train_data))
+    a.n_train = len(ds)  # meta.json records the real count when --train-data sets it
     print(f"{len(ds)} claims, init={a.init}, beta={a.beta}")
     retriever()  # load the index before the first rollout, not inside it
 
@@ -248,12 +273,13 @@ def train(a, out):
         num_train_epochs=1, max_steps=a.max_steps if a.max_steps else -1,
         bf16=True, gradient_checkpointing=True,
         logging_steps=1, log_completions=False,
-        save_strategy="no", report_to="none",
+        save_strategy="steps" if a.save_steps else "no", save_steps=a.save_steps or 500,
+        save_total_limit=4, report_to="none",
     )
     trainer = GRPOTrainer(model=model, args=cfg, train_dataset=ds, reward_funcs=funcs,
                           processing_class=tok, peft_config=peft_cfg, environment_factory=FeverSearchEnv)
     t0 = time.time()
-    trainer.train()
+    trainer.train(resume_from_checkpoint=a.resume or None)
     secs = time.time() - t0
     trainer.save_model(out)
     log_dir = os.path.join(os.path.dirname(out), "logs")
@@ -272,11 +298,17 @@ if __name__ == "__main__":
                          "(trained single-turn, may have lost tool calling)")
     ap.add_argument("--reward", default="full", choices=sorted(R.ABLATIONS))
     ap.add_argument("--n-train", type=int, default=16)
+    ap.add_argument("--train-data", default=None,
+                    help="directory with labeled_prompts.jsonl; train on exactly its claim IDs (overrides --n-train)")
+    ap.add_argument("--save-steps", type=int, default=0, help="save a resumable checkpoint every N steps; 0 = end only")
+    ap.add_argument("--resume", default=None, help="checkpoint directory to resume training from")
     ap.add_argument("--max-steps", type=int, default=3)
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--prompts-per-step", type=int, default=2)
     ap.add_argument("--max-calls", type=int, default=2,
                     help="search budget per claim; each result is ~860 tokens, so 3 calls need --max-completion-length 3072")
+    ap.add_argument("--min-searches", type=int, default=0,
+                    help="an answer after fewer real searches scores as a format failure")
     ap.add_argument("--budget-grace", type=int, default=2,
                     help="extra tool iterations that answer past-budget calls with 'reply now'; "
                          "0 restores the historical behaviour, where such rollouts end unanswered")
@@ -301,6 +333,9 @@ if __name__ == "__main__":
         ap.error("ranked search requires explicit --config-name and --run-name")
     if a.budget_grace < 0:
         ap.error("budget-grace must be nonnegative")
+    if not 0 <= a.min_searches <= a.max_calls:
+        ap.error("min-searches must be between 0 and max-calls")
+    FeverSearchEnv.min_calls = a.min_searches
     FeverSearchEnv.method = a.method
     FeverSearchEnv.k_pages, FeverSearchEnv.search_k = a.candidate_pages, a.search_k
     FeverSearchEnv.max_calls, FeverSearchEnv.budget_grace = a.max_calls, a.budget_grace
