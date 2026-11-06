@@ -4,6 +4,7 @@
     python -m agent.server --adapter verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints
     python -m agent.server --no-live                           # built UI + replay; no Bun, GPU, index or API key
     python -m agent.server --prompt-style cot_brief             # verifier explains itself; the UI shows it
+    DEMO_PASSWORD=... python -m agent.server                   # HTTP Basic auth on every route (user: demo)
 
 Endpoints (spec and event schema: verifier/docs/live-backend.md):
 
@@ -22,6 +23,9 @@ unless the server is started with --allow-reserved.
 """
 
 import argparse
+import base64
+import binascii
+import hmac
 import json
 import os
 import re
@@ -30,7 +34,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from agent import stream
@@ -165,15 +169,41 @@ def saving(events, path):
         yield e
 
 
+def password_ok(header, user, password):
+    """True if an `Authorization: Basic ...` header carries this user and password."""
+    scheme, _, token = (header or "").partition(" ")
+    if scheme.lower() != "basic":
+        return False
+    try:
+        got_user, _, got_password = base64.b64decode(token, validate=True).decode("utf-8").partition(":")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    # compare both before combining, so timing does not reveal which one was wrong
+    user_ok = hmac.compare_digest(got_user.encode(), user.encode())
+    password_ok_ = hmac.compare_digest(got_password.encode(), password.encode())
+    return user_ok and password_ok_
+
+
 # normpath: TRACE_DIR runs through data/fever/.., which does not resolve before FEVER is downloaded
 def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
-               trace_dir=os.path.normpath(TRACE_DIR), save_live=None):
+               trace_dir=os.path.normpath(TRACE_DIR), save_live=None, password=None, user="demo"):
+    """`password` puts HTTP Basic auth on every route, UI included (the browser shows its own
+    login box and sends the credentials with fetch and EventSource on the same origin)."""
     backends = backends or Backends()
     live_path = live_trace_path(trace_dir, save_live) if save_live else None
     gpu = threading.Lock()  # one live run at a time on the one GPU
-    app = FastAPI(title="Fact-check agent stream")
+    app = FastAPI(title="Fact-check agent stream",
+                  **({"docs_url": None, "redoc_url": None, "openapi_url": None} if password else {}))
     app.state.gpu = gpu
     app.add_middleware(CORSMiddleware, allow_origins=list(cors), allow_methods=["GET"], allow_headers=["*"])
+
+    if password:
+        @app.middleware("http")
+        async def require_password(request, call_next):
+            if request.method == "OPTIONS" or password_ok(request.headers.get("authorization"), user, password):
+                return await call_next(request)
+            return Response("Password required", status_code=401,
+                            headers={"WWW-Authenticate": 'Basic realm="fact-verifier", charset="UTF-8"'})
 
     @app.get("/api/health")
     def health():
@@ -302,7 +332,18 @@ if __name__ == "__main__":
     ap.add_argument("--save-live", metavar="NAME", default=None,
                     help="append each live row to <traces>/fever_dev_<NAME>.jsonl, so Browse and replay show it")
     ap.add_argument("--allow-reserved", action="store_true", help="allow calibration/holdout claim ids")
+    ap.add_argument("--user", default=os.environ.get("DEMO_USER", "demo"),
+                    help="login name when DEMO_PASSWORD is set (default: $DEMO_USER or demo)")
     a = ap.parse_args()
+    try:  # repo-root .env: DEMO_PASSWORD, OPENROUTER_API_KEY; real environment variables win
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    except ImportError:
+        pass
+    # from the environment, not a flag, so it stays out of the process list and shell history
+    password = os.environ.get("DEMO_PASSWORD") or None
+    if a.host not in ("127.0.0.1", "localhost", "::1") and not password:
+        print(f"warning: listening on {a.host} with no DEMO_PASSWORD; anyone who can reach it can run the GPU")
     if a.candidate_pages < 1:
         ap.error("candidate-pages must be positive")
     if a.max_new_tokens is not None and a.max_new_tokens < 1:
@@ -316,5 +357,6 @@ if __name__ == "__main__":
     app = create_app(Backends(a.model, a.adapter, a.method, a.candidate_pages, a.controller,
                              max_new_tokens=a.max_new_tokens, prompt_style=a.prompt_style),
                      live=not a.no_live, allow_reserved=a.allow_reserved, cors=a.cors,
-                     save_live=a.save_live)
+                     save_live=a.save_live, password=password, user=a.user)
+    print(f"password protection: {'on (user ' + a.user + ')' if password else 'off'}")
     uvicorn.run(app, host=a.host, port=a.port)

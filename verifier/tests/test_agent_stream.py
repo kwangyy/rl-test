@@ -259,6 +259,20 @@ def test_live_runs_queue_one_at_a_time(tmp_path):
     assert not gpu.locked()
 
 
+def test_password_guards_every_route(tmp_path):
+    c = client(tmp_path, password="s3cret")
+    for path in ("/api/health", "/api/traces", "/api/live?id=7", "/docs"):
+        r = c.get(path)
+        assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic")
+    assert c.get("/api/health", auth=("demo", "wrong")).status_code == 401
+    assert c.get("/api/health", auth=("someone", "s3cret")).status_code == 401
+    assert c.get("/api/health", headers={"Authorization": "Basic !!notbase64"}).status_code == 401
+    assert c.get("/api/health", auth=("demo", "s3cret")).json()["status"] == "ok"
+    r = c.get("/api/live", params={"id": 7, "policy": "fixed", "search_k": 3}, auth=("demo", "s3cret"))
+    assert parse_sse(r.text)[-1]["event"] == "final"
+    assert client(tmp_path).get("/api/health").status_code == 200  # off unless a password is given
+
+
 def test_trace_endpoints(tmp_path):
     rows = agent_loop.run_chunk([CLAIM, NEI_CLAIM], FakeSearch(), FakeVerify(), RUN, search_k=3)
     (tmp_path / "fever_dev_fake_n2.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")

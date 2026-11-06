@@ -52,3 +52,8 @@ verifier/experiments/**/artifacts/checkpoints/**/tokenizer.json
 verifier/experiments/**/artifacts/checkpoints/**/tokenizer_config.json
 verifier/experiments/**/artifacts/checkpoints/**/chat_template.jinja
 verifier/experiments/**/artifacts/checkpoints/**/README.md
+
+# self-host deployment (deploy/README.md)
+deploy/logs/
+deploy/cloudflared.yml
+verifier/data/traces/fever_dev_public-live.jsonl

@@ -1,0 +1,12 @@
+# Copy to deploy/cloudflared.yml (git-ignored) and replace <TUNNEL_ID> with the id that
+# `cloudflared tunnel create rl-project` printed. The credentials file is written there too.
+tunnel: <TUNNEL_ID>
+credentials-file: C:\Users\ky\.cloudflared\<TUNNEL_ID>.json
+
+ingress:
+  - hostname: rl-project.kwangyyinc.com
+    service: http://127.0.0.1:8000
+    originRequest:
+      # live runs stream for up to a few minutes over server-sent events
+      keepAliveTimeout: 10m
+  - service: http_status:404
