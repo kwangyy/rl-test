@@ -52,18 +52,20 @@ browser ──https──> Cloudflare (rl-project.kwangyyinc.com) ──tunnel�
 
 ## Running it
 
-Open two terminals in this checkout:
-
 ```powershell
-powershell -ExecutionPolicy Bypass -File deploy\start-backend.ps1   # restarts the server if it exits
-powershell -ExecutionPolicy Bypass -File deploy\start-tunnel.ps1
+powershell -ExecutionPolicy Bypass -File deploy\start-all.ps1          # backend + tunnel in hidden windows
+powershell -ExecutionPolicy Bypass -File deploy\stop-all.ps1           # stop both
+powershell -ExecutionPolicy Bypass -File deploy\install-autostart.ps1  # run start-all at every logon
+powershell -ExecutionPolicy Bypass -File deploy\install-autostart.ps1 -Remove
 ```
 
 Then open https://rl-project.kwangyyinc.com and log in as `demo` with the `DEMO_PASSWORD` from `.env`.
 
-To keep it running after logout or a reboot:
-- **Tunnel:** `cloudflared service install` runs it as a Windows service. Copy the config to `C:\Windows\System32\config\systemprofile\.cloudflared\config.yml`, or pass `--config`.
-- **Backend:** create a Task Scheduler task "At log on" that runs the `start-backend.ps1` command above with "Run whether user is logged on or not". The GPU must stay available, so turn off sleep in Windows power settings.
+To debug, run `start-backend.ps1` or `start-tunnel.ps1` on its own in a terminal instead. `start-backend.ps1` restarts the server if it exits.
+
+- **Autostart** puts `rl-project-demo.cmd` in this user's Startup folder, so the site comes back after a reboot once you log in. Running before logon needs an admin-installed service (`cloudflared service install`) and a Task Scheduler task.
+- **Sleep:** the PC must not sleep, or the site goes down. Set "Sleep: never" when plugged in, under Settings, then System, then Power.
+- **A new zone's HTTPS certificate** can take from about 15 minutes to 24 hours after the domain becomes active on Cloudflare. Until then the browser shows a TLS or handshake error even though the tunnel is connected.
 
 ## Checks
 
@@ -72,7 +74,7 @@ curl.exe -s -u demo:<password> http://127.0.0.1:8000/api/health       # local
 curl.exe -s -o NUL -w "%{http_code}" https://rl-project.kwangyyinc.com/api/health   # expect 401 without a password
 ```
 
-Logs are written to `deploy/logs/backend-<date>.log`.
+Logs are written to `deploy/logs/backend-<date>.log` and `deploy/logs/tunnel.log`.
 
 ## Without moving DNS
 

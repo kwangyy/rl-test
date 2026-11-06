@@ -12,4 +12,5 @@ if (-not $cf) {
 if (-not (Test-Path $Config)) {
     throw "Missing $Config; copy deploy\cloudflared.example.yml to it and fill in the tunnel id"
 }
-& $cf tunnel --no-autoupdate --config $Config run
+New-Item -ItemType Directory -Force "$PSScriptRoot\logs" | Out-Null
+& $cf tunnel --no-autoupdate --logfile "$PSScriptRoot\logs\tunnel.log" --config $Config run
