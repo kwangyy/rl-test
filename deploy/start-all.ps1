@@ -1,4 +1,4 @@
-# Start the backend and the tunnel in hidden windows, detached from this terminal.
+# Start the backend, the tunnel and the auto-updater in hidden windows, detached from this terminal.
 # install-autostart.ps1 runs this at every Windows logon. Safe to run twice: it skips what is already up.
 #
 #   powershell -ExecutionPolicy Bypass -File deploy\start-all.ps1
@@ -24,4 +24,11 @@ if (Get-Process cloudflared -ErrorAction SilentlyContinue) {
 } else {
     Start-Process $ps -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\start-tunnel.ps1`""
     Write-Host "tunnel started"
+}
+
+if (Running "auto-update.ps1") {
+    Write-Host "auto-updater already running"
+} else {
+    Start-Process $ps -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\auto-update.ps1`""
+    Write-Host "auto-updater started (checks origin/deploy/self-host every 5 min)"
 }

@@ -53,13 +53,23 @@ browser ──https──> Cloudflare (rl-project.kwangyyinc.com) ──tunnel�
 ## Running it
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File deploy\start-all.ps1          # backend + tunnel in hidden windows
-powershell -ExecutionPolicy Bypass -File deploy\stop-all.ps1           # stop both
+powershell -ExecutionPolicy Bypass -File deploy\start-all.ps1          # backend, tunnel and auto-updater
+powershell -ExecutionPolicy Bypass -File deploy\stop-all.ps1           # stop all three
 powershell -ExecutionPolicy Bypass -File deploy\install-autostart.ps1  # run start-all at every logon
 powershell -ExecutionPolicy Bypass -File deploy\install-autostart.ps1 -Remove
 ```
 
 Then open https://rl-project.kwangyyinc.com and log in as `demo` with the `DEMO_PASSWORD` from `.env`.
+
+**Auto-update.** `start-all.ps1` also starts `auto-update.ps1`. Every 5 minutes it fetches `origin/deploy/self-host`, fast-forwards this checkout and restarts what changed:
+- **Code changes:** the backend restarts, which takes about 20 s.
+- **Changes to `deploy/*.ps1` or `deploy/*.yml`:** the backend and tunnel both restart.
+- **Only traces or `.md` files:** nothing restarts.
+
+It never overwrites anything. If this checkout has local commits or uncommitted edits to tracked files, it logs that and skips the update. The log is `deploy/logs/update.log`.
+
+Whatever is pushed to `deploy/self-host` runs on this PC, so treat that branch as the release branch. Merge `demo` or other branches into it when you want them live:
+`git checkout deploy/self-host && git merge origin/demo && git push`.
 
 To debug, run `start-backend.ps1` or `start-tunnel.ps1` on its own in a terminal instead. `start-backend.ps1` restarts the server if it exits.
 
