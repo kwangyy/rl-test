@@ -66,11 +66,21 @@ def stream_fixed(c, search, verify, run_info, search_k=K):
     yield {"event": "final", "row": row}
 
 
-def stream_prompted(c, search, verify, big, decomposer, run_info, search_k=K):
-    """prompted.py's controller on one claim, one decision at a time, up to prompted.MAX_STEPS."""
+def stream_prompted(c, search, verify, big, decomposer, run_info, search_k=K, tools="full"):
+    """prompted.py's controller on one claim, one decision at a time, up to prompted.MAX_STEPS.
+
+    `big` is an API model or a local LoRA controller (agent.decompose.LocalController); both are
+    called one decision at a time here. `tools` is a prompted.TOOLSETS preset, set up as run_chunk does."""
     yield _start(c, run_info)
     ep = prompted.Episode(_scorable(c))
     ep.texts = {}
+    ep.tools = tools
+    ep.kit = prompted.ToolKit(search.r, prompted.TOOLSETS[tools])
+    if tools == "nosearch":  # the fixed loop's one search of the claim, before any controller call
+        a = {"action": "search", "query": ep.c["claim"]}
+        yield {"event": "action", "t": 0, "action": "search", "args": {"query": a["query"]}}
+        prompted.act([ep], [(a, None)], search, verify, decomposer, None, search_k)
+        yield {"event": "step", "step": ep.steps[-1]}
     with ThreadPoolExecutor(2) as pool:
         while ep.end is None:
             if len(ep.steps) >= prompted.MAX_STEPS:

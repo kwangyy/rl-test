@@ -1,0 +1,20 @@
+{
+  "run_name": "cascade-cal900",
+  "commit": "9581c4950edf7d97186eb27bf841100df647d4fa",
+  "worktree_dirty": false,
+  "model": "Qwen/Qwen3.5-2B",
+  "checkpoints": null,
+  "thinking": "off",
+  "prompt_style": "direct",
+  "retrieval": "titles",
+  "condition": "baseline-direct-cap160",
+  "result_dir": "verifier/evaluation/results/baseline-direct-cap160/cascade-cal900",
+  "n_claims": 900,
+  "claim_ids": "verifier/data/eval/fever-evaluation-v1/calibration-900-ids.json",
+  "predictions": "verifier/evaluation/results/baseline-direct-cap160/cascade-cal900/predictions.jsonl",
+  "metrics": "verifier/evaluation/results/baseline-direct-cap160/cascade-cal900/metrics.json",
+  "max_new_tokens": 160,
+  "max_new_tokens_source": "verifier/model.py default at run commit",
+  "host": "local RTX 5070 Ti",
+  "purpose": "cascade payoff (verifier/docs/cascade-payoff.md)"
+}

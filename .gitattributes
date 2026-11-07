@@ -1,3 +1,5 @@
 # Hashed data files: keep bytes identical on every platform
 *.json -text
 *.jsonl -text
+verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints/adapter_model.safetensors filter=lfs diff=lfs merge=lfs -text
+verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints/adapter_model.safetensors filter=lfs diff=lfs merge=lfs -text

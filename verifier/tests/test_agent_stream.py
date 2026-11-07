@@ -18,6 +18,8 @@ NEI_CLAIM = {"id": 8, "claim": "Ada Lovelace owned a cat.", "label": "NOT ENOUGH
 
 
 class FakeSearch:
+    r = None  # the retriever behind agent.tools.ToolKit; only the "full" preset (no tools) runs here
+
     def batch(self, queries, k):
         return [[{"page": "Ada_Lovelace", "line": i, "text": f"{q} sentence {i}", "score": 10.0 - i}
                  for i in range(min(k, 3))] for q in queries]
@@ -160,9 +162,14 @@ def parse_sse(text):
     return out
 
 
-def client(tmp_path, verify=None, **kw):
+class LocalScripted(ScriptedController):
+    name = "local:fake-2b-controller"
+
+
+def client(tmp_path, verify=None, local=True, **kw):
     backends = Backends(search=FakeSearch(), verify=verify or FakeVerify(), big=ScriptedController(),
-                        decomposer=FakeDecomposer(), claims={"7": CLAIM, "8": NEI_CLAIM})
+                        decomposer=FakeDecomposer(), claims={"7": CLAIM, "8": NEI_CLAIM}, tools="full",
+                        local=(LocalScripted(), FakeDecomposer()) if local else None)
     return TestClient(create_app(backends, trace_dir=str(tmp_path), **kw))
 
 
@@ -181,6 +188,20 @@ def test_live_prompted_and_free_text(tmp_path):
     row = parse_sse(r.text)[-1]["row"]
     assert row["gold"] is None and row["final"]["ended_by"] == "commit"
     assert row["run"]["controller"] == "fake-controller"
+
+
+def test_live_local_controller_policy(tmp_path):
+    c = client(tmp_path)
+    assert c.get("/api/health").json()["policies"] == ["fixed", "prompted", "controller"]
+    events = parse_sse(c.get("/api/live", params={"id": 7, "policy": "controller", "search_k": 3}).text)
+    row = events[-1]["row"]
+    assert row["run"]["controller"] == "local:fake-2b-controller" and row["run"]["tools"] == "full"
+    assert row["final"]["ended_by"] == "commit" and row["gold"] == "SUPPORTED"
+    assert [e["action"] for e in events if e["event"] == "action"] == [
+        "search", "decompose", "verify", "verify", "commit"]
+    off = client(tmp_path, local=False)
+    assert off.get("/api/health").json()["policies"] == ["fixed", "prompted"]
+    assert off.get("/api/live", params={"id": 7, "policy": "controller"}).status_code == 404
 
 
 def test_live_rejects_bad_requests(tmp_path):

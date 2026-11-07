@@ -1,0 +1,32 @@
+{
+ "description": "Holdout 3,000 traces of the prompted loop (follow tools, 5895 verifier): the imitation controller and the single controller GRPO configuration chosen on dev 900 (run A, lr 5e-5). Evaluated once under the holdout policy (finalized configurations only). Run through verifier.evaluation.eval_controller_offline, which never calls the decomposer API; no claim needed a decompose split.",
+ "claim_ids": "verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json",
+ "verifier": "Qwen/Qwen3.5-2B+sft-direct-from-base-qwen3p5-2b-5895-samples_run1",
+ "tools": "follow",
+ "max_steps": 8,
+ "retrieval": "prompted-bm25-p5-k100",
+ "format": "trace schema 3 (verifier/docs/trace-format.md)",
+ "license": "Derived from FEVER (CC BY-SA 3.0)",
+ "files": {
+  "local-imitation-run1-follow.jsonl.gz": {
+   "controller": "local:verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,CLAIM_IDS=verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-03",
+   "slurm_job": 1067828,
+   "n": 3000,
+   "fever_score": 0.673,
+   "accuracy": 0.763,
+   "sha256": "9640ba2f860ed6fd9000394cf7f938fc6d30b144e07f2f8123fcd64d63aadbc1"
+  },
+  "local-grpo-ctl-lr5e5-1000-run1-follow.jsonl.gz": {
+   "controller": "local:<imitation run1 checkpoints>,verifier/experiments/grpo-controller-from-sftctl18291-qwen3p5-2b-fever-ops001-nostd-lr5e5-kl004-1000-samples/runs/run1/artifacts/checkpoints",
+   "command": "sbatch --export=ALL,CONTROLLER=local:<imitation run1 checkpoints>,GRPO=<run checkpoints>,CLAIM_IDS=verifier/data/eval/fever-evaluation-v1/holdout-3000-ids.json verifier/evaluation/eval_controller.sbatch",
+   "date": "2026-11-04",
+   "slurm_job": 1072154,
+   "n": 3000,
+   "fever_score": 0.678,
+   "accuracy": 0.765,
+   "sha256": "ec0b7330e9b5e0f50d3ef948c1a14f36352eea964f924226ad0c29cc8ce3e746"
+  }
+ }
+}

@@ -41,7 +41,7 @@ from agent import stream
 from agent.agent_loop import TRACE_DIR, reward_version
 from verifier.model import BIG_MODEL, DEFAULT_MAX_NEW_TOKENS, K_PAGES, LOCAL_MODEL, PROMPT_STYLES, SEED
 
-POLICIES = ("fixed", "prompted")
+POLICIES = ("fixed", "prompted", "controller")  # controller only with --controller-adapter
 DEMO_DIR = Path(__file__).resolve().parent.parent / "demo" / "dist"
 
 
@@ -50,22 +50,44 @@ class Backends:
 
     Tests pass ready-made objects instead; anything passed is used as is.
     `prompt_style` picks the verifier prompt (and whether native thinking is on);
-    `max_new_tokens` defaults to that style's budget."""
+    `max_new_tokens` defaults to that style's budget.
+    `controller_adapter` is a trained 2B controller LoRA (e.g. the imitation controller); it adds
+    policy=controller, which runs it on the local GPU next to the verifier."""
 
     def __init__(self, model=LOCAL_MODEL, adapter=None, method="bm25", candidate_pages=K_PAGES,
                  controller=BIG_MODEL, search=None, verify=None, big=None, decomposer=None, claims=None,
-                 *, max_new_tokens=None, prompt_style="direct"):
+                 *, max_new_tokens=None, prompt_style="direct", controller_adapter=None, local=None,
+                 tools="follow"):
         self.model, self.adapter, self.method, self.candidate_pages = model, adapter, method, candidate_pages
         self.controller = controller
+        self.controller_adapter = controller_adapter
+        self.tools = tools
         self.prompt_style = prompt_style
         self.max_new_tokens = DEFAULT_MAX_NEW_TOKENS[prompt_style] if max_new_tokens is None else max_new_tokens
         self._search, self._verify, self._big, self._decomposer, self._claims = search, verify, big, decomposer, claims
+        self._local = local  # (controller, decomposer) for policy=controller
         self.build = threading.Lock()
+
+    @property
+    def policies(self):
+        return [p for p in POLICIES
+                if p != "controller" or self.controller_adapter or self._local is not None]
 
     @property
     def loaded(self):
         return {"search": self._search is not None, "verify": self._verify is not None,
-                "controller": self._big is not None, "claims": self._claims is not None}
+                "controller": self._big is not None, "local_controller": self._local is not None,
+                "claims": self._claims is not None}
+
+    def local_pair(self):
+        """The 2B controller and a decomposer; like prompted.py with local:<adapter>, sub-claims
+        still come from BIG_MODEL (cached for dev claims, an API call for new text)."""
+        with self.build:
+            if self._local is None:
+                from agent.decompose import Decomposer, LocalController, cache_path
+                self._local = (LocalController(self.controller_adapter, base=self.model, batch_size=1),
+                               Decomposer(None, cache_path(BIG_MODEL, 900)))
+            return self._local
 
     def search(self):
         with self.build:
@@ -207,18 +229,21 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "live": live, "policies": list(POLICIES) if live else [],
+        return {"status": "ok", "live": live, "policies": backends.policies if live else [],
                 "loaded": backends.loaded, "model": backends.model, "adapter": backends.adapter,
                 "method": backends.method, "candidate_pages": backends.candidate_pages,
                 "controller": backends.controller, "max_new_tokens": backends.max_new_tokens,
-                "prompt_style": backends.prompt_style}
+                "prompt_style": backends.prompt_style, "tools": backends.tools,
+                "controller_adapter": backends.controller_adapter}
 
     @app.get("/api/live")
     def run_live(claim: str | None = None, id: str | None = None,
-                 policy: str = Query("fixed", pattern="^(fixed|prompted)$"),
+                 policy: str = Query("fixed", pattern="^(fixed|prompted|controller)$"),
                  search_k: int = Query(stream.K, ge=1, le=stream.K)):
         if not live:
             raise HTTPException(503, "server started with --no-live")
+        if policy not in backends.policies:
+            raise HTTPException(404, f"policy {policy} is not enabled on this server")
         if (claim is None) == (id is None):
             raise HTTPException(422, "give exactly one of claim or id")
         if id is not None:
@@ -253,14 +278,25 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
                 if policy == "fixed":
                     yield from stream.stream_fixed(c, search, verify, run_info, search_k)
                 else:
-                    big, decomposer = backends.controller_pair()
+                    if policy == "controller":
+                        if not backends.loaded["local_controller"]:
+                            yield {"event": "status", "message": "loading the 2B controller"}
+                        big, decomposer = backends.local_pair()
+                    else:
+                        big, decomposer = backends.controller_pair()
+                    tools = backends.tools
+                    p = stream.prompted
+                    # same fields as prompted.py's batch rows, so live runs sit next to the saved traces
                     run_info = {"policy": f"prompted-{tag}", "controller": big.name, "verifier": verify.name,
                                 "max_new_tokens": backends.max_new_tokens,
                                 "prompt_style": backends.prompt_style,
                                 "reward_version": reward_version(), "seed": SEED,
-                                "max_steps": stream.prompted.MAX_STEPS,
-                                "controller_prompt": stream.prompted.CONTROLLER_PROMPT}
-                    yield from stream.stream_prompted(c, search, verify, big, decomposer, run_info, search_k)
+                                "max_steps": p.MAX_STEPS,
+                                "controller_prompt": p.CONTROLLER_PROMPT + ("" if tools == "full" else f"-{tools}"),
+                                "tools": tools, "tool_names": list(p.TOOLSETS[tools]),
+                                "decomposer_prompt": getattr(decomposer, "prompt", None), "final_rule": p.FINAL_RULE}
+                    yield from stream.stream_prompted(c, search, verify, big, decomposer, run_info, search_k,
+                                                      tools=tools)
             finally:
                 gpu.release()
 
@@ -321,6 +357,10 @@ if __name__ == "__main__":
     ap.add_argument("--method", choices=("bm25", "hybrid"), default="bm25")
     ap.add_argument("--candidate-pages", type=int, default=K_PAGES)
     ap.add_argument("--controller", default=BIG_MODEL, help="big model for policy=prompted (OpenRouter)")
+    ap.add_argument("--controller-adapter", default=None,
+                    help="2B controller LoRA dir; adds policy=controller, run on the local GPU")
+    ap.add_argument("--tools", choices=("full", "nosearch", "follow", "pages"), default="follow",
+                    help="controller action set for prompted and controller (prompted.py --tools)")
     ap.add_argument("--prompt-style", choices=tuple(PROMPT_STYLES), default="direct",
                     help="verifier prompt: direct (JSON only) or a reasoning style (cot_native = Qwen thinking)")
     ap.add_argument("--max-new-tokens", type=int, default=None,
@@ -355,7 +395,8 @@ if __name__ == "__main__":
             ap.error(str(exc))
     import uvicorn
     app = create_app(Backends(a.model, a.adapter, a.method, a.candidate_pages, a.controller,
-                             max_new_tokens=a.max_new_tokens, prompt_style=a.prompt_style),
+                             max_new_tokens=a.max_new_tokens, prompt_style=a.prompt_style,
+                             controller_adapter=a.controller_adapter, tools=a.tools),
                      live=not a.no_live, allow_reserved=a.allow_reserved, cors=a.cors,
                      save_live=a.save_live, password=password, user=a.user)
     print(f"password protection: {'on (user ' + a.user + ')' if password else 'off'}")

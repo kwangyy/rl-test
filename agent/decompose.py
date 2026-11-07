@@ -86,11 +86,18 @@ class BigModel:
         key_env = os.getenv("CONTROLLER_API_KEY_ENV", "OPENROUTER_API_KEY")
         self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=3)
         self.name = name
-        self.max_tokens = max_tokens
+        # Claude sometimes reasons in text before its JSON; 200 tokens cut that off (smoke run)
+        self.max_tokens = max(max_tokens, 1000) if name.startswith("anthropic/") else max_tokens
 
     def __call__(self, system, user):
-        options = ({"temperature": 0, "seed": SEED, "extra_body": {"reasoning": {"enabled": False}}}
-                   if self.client.base_url.host == "openrouter.ai" else {"reasoning_effort": "none"})
+        # Claude 5.x on OpenRouter cannot disable reasoning and takes no temperature;
+        # "minimal" effort is the closest to off (0 reasoning tokens on a test call).
+        claude = self.name.startswith("anthropic/")
+        if self.client.base_url.host == "openrouter.ai":
+            options = {**({} if claude else {"temperature": 0, "seed": SEED}),
+                       "extra_body": {"reasoning": {"effort": "minimal"} if claude else {"enabled": False}}}
+        else:
+            options = {"reasoning_effort": "none"}
         r = self.client.chat.completions.create(
             model=self.name, max_tokens=self.max_tokens,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -98,6 +105,57 @@ class BigModel:
         )
         return {"text": r.choices[0].message.content or "",
                 "in_tokens": r.usage.prompt_tokens, "out_tokens": r.usage.completion_tokens}
+
+
+class ClaudeModel:
+    """BigModel's interface on the Anthropic API (ANTHROPIC_API_KEY in .env), for claude-* names.
+
+    Thinking is off ("between_tools"), like BigModel's reasoning: enabled False. Claude 5.x
+    models take no temperature or seed, so repeated calls are not guaranteed identical."""
+
+    def __init__(self, name, max_tokens=200):
+        import anthropic
+        load_env()
+        self.client = anthropic.Anthropic(max_retries=8)
+        self.name = name
+        self.max_tokens = max_tokens
+
+    def __call__(self, system, user):
+        r = self.client.messages.create(
+            model=self.name, max_tokens=self.max_tokens, system=system,
+            thinking={"type": "between_tools"},
+            messages=[{"role": "user", "content": user}],
+        )
+        return {"text": "".join(b.text for b in r.content if b.type == "text"),
+                "in_tokens": r.usage.input_tokens, "out_tokens": r.usage.output_tokens}
+
+
+class LocalController:
+    """A LoRA controller on the local GPU ("local:<adapter dir>"), e.g. one trained by imitation
+    of flash. BigModel's interface, plus batch() so a chunk's decisions run as one generate call."""
+
+    def __init__(self, adapter, max_tokens=64, base=None, batch_size=32):
+        from verifier.model import LOCAL_MODEL, LocalModel
+        self.m = LocalModel(base or LOCAL_MODEL, batch_size=batch_size, adapter=adapter, max_new_tokens=max_tokens)
+        self.name = "local:" + self.m.name
+
+    def __call__(self, system, user):
+        return self.batch([(system, user)])[0]
+
+    def batch(self, pairs):
+        systems = {s for s, _ in pairs}
+        if len(systems) != 1:
+            raise ValueError("one system prompt per batch")
+        self.m.system_prompt = systems.pop()
+        return [{"text": g["text"], "in_tokens": g["in_tokens"], "out_tokens": g["out_tokens"]}
+                for g in self.m.run([u for _, u in pairs])]
+
+
+def big_model(name=BIG_MODEL, max_tokens=200):
+    """LocalController for local:<adapter>, ClaudeModel for claude-* names, otherwise BigModel on OpenRouter."""
+    if name.startswith("local:"):
+        return LocalController(name[len("local:"):])
+    return (ClaudeModel if name.startswith("claude-") else BigModel)(name, max_tokens)
 
 
 def first_json(text, kind):
@@ -140,7 +198,7 @@ class Decomposer:
         if claim in self.cache:
             return {**self.cache[claim], "cached": True}
         if self.big is None:
-            self.big = BigModel(self.name)
+            self.big = big_model(self.name)
         g = self.big(self.system, f"Claim: {claim}")
         subs = [s.strip() for s in (first_json(g["text"], list) or []) if isinstance(s, str) and s.strip()]
         subs = list(dict.fromkeys(subs))

@@ -1,0 +1,20 @@
+{
+  "run_name": "cascade-cal900",
+  "commit": "9581c4950edf7d97186eb27bf841100df647d4fa",
+  "worktree_dirty": false,
+  "model": "qwen/qwen3.8-flash",
+  "checkpoints": null,
+  "thinking": "off",
+  "prompt_style": "direct",
+  "retrieval": "titles",
+  "condition": "big-direct-cap160",
+  "result_dir": "verifier/evaluation/results/big-direct-cap160/cascade-cal900",
+  "n_claims": 900,
+  "claim_ids": "verifier/data/eval/fever-evaluation-v1/calibration-900-ids.json",
+  "predictions": "verifier/evaluation/results/big-direct-cap160/cascade-cal900/predictions.jsonl",
+  "metrics": "verifier/evaluation/results/big-direct-cap160/cascade-cal900/metrics.json",
+  "max_new_tokens": 160,
+  "max_new_tokens_source": "verifier/model.py default at run commit",
+  "host": "OpenRouter",
+  "purpose": "cascade payoff (verifier/docs/cascade-payoff.md)"
+}

@@ -16,7 +16,15 @@ browser ──https──> Cloudflare (rl-project.kwangyyinc.com) ──tunnel�
 ## What runs
 
 - **Verifier:** Qwen3.5-2B with `sft-direct-from-base-qwen3p5-2b-5895-samples/run1`, the same verifier as the controller experiments. It uses about 5 GB of VRAM, and a typed claim takes about 20 s on the first request (loading the index and model), then a few seconds.
-- **Policies:** `fixed` (local only) and `prompted`. `prompted` calls `qwen/qwen3.8-flash` on OpenRouter, paid for with the key named by `-KeyEnv` (default `OPENROUTER_API_KEY_TEAM`).
+- **Policies:**
+  - `fixed`: local only. It searches the claim once, verifies, then commits or abstains.
+  - `controller`: the 2B imitation controller (`sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/run1`), on the GPU next to the verifier. It uses the `follow` tool preset it was trained with.
+    - Dev 900 FEVER is 0.684 (flash 0.690, GRPO run A 0.700) and holdout 3,000 is 0.673. The two models together use about 10 GB of VRAM.
+    - A claim takes 2–8 s once the model is loaded. The first `controller` request loads it.
+    - On 8 dev claims, live runs matched the saved batch trace on all 8 verdicts and citations, and 7 of 8 took identical action sequences.
+    - Sub-claims still come from flash: cached for dev claims, an API call for typed text.
+  - `prompted`: `qwen/qwen3.8-flash` on OpenRouter as the controller, with the same `follow` tools. It is paid for with the key named by `-KeyEnv` (default `OPENROUTER_API_KEY_TEAM`).
+  - Pass `-ControllerAdapter ""` to `start-backend.ps1` to turn off the `controller` policy.
 - **Browse, Compare and Replay:** every `verifier/data/traces/*.jsonl`, including the controller GRPO, imitation and flash traces.
 - **Live runs** are saved to `verifier/data/traces/fever_dev_public-live.jsonl` (git-ignored, because it holds visitors' text), so they show up in Browse.
 - **Limits:** one live run at a time on the GPU, and others queue. Holdout and calibration claim IDs are refused.
@@ -29,6 +37,9 @@ browser ──https──> Cloudflare (rl-project.kwangyyinc.com) ──tunnel�
    New-Item -ItemType Junction -Path verifier\data\fever -Target ..\rl-test\verifier\data\fever
    Copy-Item -Recurse ..\rl-test\verifier\experiments\sft-direct-from-base-qwen3p5-2b-5895-samples\runs\run1\artifacts\checkpoints\* `
      verifier\experiments\sft-direct-from-base-qwen3p5-2b-5895-samples\runs\run1\artifacts\checkpoints\
+   # the imitation controller: copy the same way, or `git lfs pull` on controller/grpo-handover
+   Copy-Item -Recurse ..\rl-test\verifier\experiments\sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples\runs\run1\artifacts\checkpoints\* `
+     verifier\experiments\sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples\runs\run1\artifacts\checkpoints\
    ```
 3. **`.env`** in the repo root (git-ignored) needs two settings:
    ```

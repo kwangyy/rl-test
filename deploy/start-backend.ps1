@@ -8,6 +8,8 @@
 param(
     [int]$Port = 8000,
     [string]$Adapter = "verifier/experiments/sft-direct-from-base-qwen3p5-2b-5895-samples/runs/run1/artifacts/checkpoints",
+    # the 2B imitation controller (ties flash on dev 900) for policy=controller; "" turns it off
+    [string]$ControllerAdapter = "verifier/experiments/sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples/runs/run1/artifacts/checkpoints",
     [string]$Origin = "https://rl-project.kwangyyinc.com",
     [string]$SaveLive = "public-live",
     [string]$KeyEnv = "OPENROUTER_API_KEY_TEAM",
@@ -28,6 +30,11 @@ if (-not ($envFile -match '^\s*DEMO_PASSWORD\s*=\s*\S') -and -not $env:DEMO_PASS
     throw "Set DEMO_PASSWORD in $root\.env first; the site is public through the tunnel"
 }
 if (-not (Test-Path "$Adapter\adapter_model.safetensors")) { throw "Adapter weights missing: $Adapter" }
+$ctl = ""
+if ($ControllerAdapter) {
+    if (-not (Test-Path "$ControllerAdapter\adapter_model.safetensors")) { throw "Controller weights missing: $ControllerAdapter" }
+    $ctl = "--controller-adapter `"$ControllerAdapter`""
+}
 if (-not (Test-Path "verifier\data\fever\pages.sqlite")) { throw "FEVER index missing; see verifier/docs/data.md" }
 
 $env:CONTROLLER_API_KEY_ENV = $KeyEnv   # which .env key the prompted controller uses
@@ -41,7 +48,7 @@ while ($true) {
     $log = "$root\deploy\logs\backend-$(Get-Date -Format yyyyMMdd).log"
     Write-Host "$(Get-Date -Format s) starting backend on 127.0.0.1:$Port (log: $log)"
     # through cmd so the log stays plain UTF-8 text (PowerShell 5.1 redirection writes UTF-16)
-    cmd /c "`"$Python`" -m agent.server --host 127.0.0.1 --port $Port --adapter `"$Adapter`" --cors $Origin --save-live $SaveLive >> `"$log`" 2>&1"
+    cmd /c "`"$Python`" -m agent.server --host 127.0.0.1 --port $Port --adapter `"$Adapter`" $ctl --cors $Origin --save-live $SaveLive >> `"$log`" 2>&1"
     Write-Host "$(Get-Date -Format s) backend exited with code $LASTEXITCODE; restarting in 5 s"
     Start-Sleep -Seconds 5
 }

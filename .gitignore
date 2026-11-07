@@ -52,6 +52,12 @@ verifier/experiments/**/artifacts/checkpoints/**/tokenizer.json
 verifier/experiments/**/artifacts/checkpoints/**/tokenizer_config.json
 verifier/experiments/**/artifacts/checkpoints/**/chat_template.jinja
 verifier/experiments/**/artifacts/checkpoints/**/README.md
+# controller GRPO resume state (LoRA + optimizer), rewritten every few steps
+verifier/experiments/**/artifacts/resume/
+verifier/experiments/**/artifacts/resume.tmp/
+
+# Exa web search responses (retrieval/exa.py cache)
+verifier/data/exa-cache/
 
 # self-host deployment (deploy/README.md)
 deploy/logs/
