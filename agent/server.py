@@ -219,6 +219,15 @@ def create_app(backends=None, *, live=True, allow_reserved=False, cors=("*",),
     app.state.gpu = gpu
     app.add_middleware(CORSMiddleware, allow_origins=list(cors), allow_methods=["GET"], allow_headers=["*"])
 
+    @app.middleware("http")
+    async def revalidate_ui(request, call_next):
+        # demo/dist keeps fixed names (app.js, app.css), so without this browsers may keep
+        # showing an old build after a deploy; no-cache still lets them reuse it via ETag
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
     if password:
         @app.middleware("http")
         async def require_password(request, call_next):
