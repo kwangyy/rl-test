@@ -65,20 +65,25 @@ const actionStyles: Record<string, { icon: ReactNode; num: string }> = {
 };
 const fallbackStyle = { icon: "•", num: "bg-card text-muted-foreground ring-border" };
 
-export function StepTimeline({ steps, cited, busy }: { steps: Step[]; cited: Set<string>; busy: boolean }) {
+export function StepTimeline({ steps, cited, busy, active, onSelect }: {
+    steps: Step[]; cited: Set<string>; busy: boolean;
+    /** the step the architecture diagram is showing; clicking a step moves the diagram there */
+    active?: number; onSelect?: (i: number) => void;
+}) {
     return (
         <ol className="relative space-y-3">
-            {steps.map((step) => {
+            {steps.map((step, i) => {
                 const style = actionStyles[step.action] ?? fallbackStyle;
                 // what the step acted on: a query, a page title, or the page a followed link opened
                 const target = step.args.query ?? step.args.title ?? step.args.page ?? step.args.target;
                 const empty = step.result.status && step.result.status !== "ok" && !step.result.hits?.length && !step.result.pages?.length;
                 return (
-                    <li key={step.t} className="relative pl-10" style={{ animation: "step-in 300ms ease-out" }}>
+                    <li key={step.t} className="relative pl-10" style={{ animation: "step-in 300ms ease-out" }}
+                        onClick={onSelect && ((e) => { if (!(e.target as HTMLElement).closest("summary, details[open] > *:not(summary)")) onSelect(i); })}>
                         <span className={`absolute left-0 top-1 z-10 grid size-7 place-items-center rounded-full text-sm font-semibold ring-1 ${style.num}`}>
                             {style.icon}
                         </span>
-                        <div className="space-y-2 card-raised rounded-lg bg-card p-3 py-2 text-sm text-muted-foreground ring-1 ring-border">
+                        <div className={`space-y-2 card-raised rounded-lg bg-card p-3 py-2 text-sm text-muted-foreground transition ${active === i ? "ring-2 ring-primary/70" : "ring-1 ring-border"} ${onSelect ? "cursor-pointer hover:ring-primary/40" : ""}`}>
                             <div className="flex min-w-0 items-center gap-2">
                                 <h3 className="flex items-center gap-1.5 shrink-0 font-medium text-foreground capitalize">
                                     <span className="text-xs font-normal tabular-nums text-muted-foreground">{step.t + 1}</span>

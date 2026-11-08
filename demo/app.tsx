@@ -5,6 +5,7 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { TraceTable } from "./components/TraceTable";
 import { Compare } from "./components/Compare";
 import { VerificationResult } from "./components/VerificationResult";
+import type { Pending } from "./components/Architecture";
 
 export type Health = { live: boolean; policies: string[] };
 export type Trace = { name: string; rows: number };
@@ -30,7 +31,7 @@ export type Step = {
 export type Row = {
     claim: string;
     gold?: string | null;
-    run?: { policy?: string; verifier?: string; controller?: string; tools?: string };
+    run?: { policy?: string; verifier?: string; controller?: string; tools?: string; max_steps?: number };
     cost?: { n_ops?: number; tokens_in?: number; tokens_out?: number; seconds?: number };
     steps: Step[];
     final: { verdict: string | null; evidence: string[]; confidence: number | null };
@@ -45,15 +46,25 @@ export const getJson = async <T,>(path: string): Promise<T> => {
 /** "prompted-bm25" -> "Prompted" etc. Unknown policies fall back to their raw name. */
 export const policyLabel = (p: string) =>
     p.startsWith("fixed") ? "Fixed: search, then verify"
+    : p === "controller" ? "Controller: 2B imitation model"
+    : p === "prompted" ? "Prompted: Qwen flash chooses steps"
     : p.startsWith("prompted") ? "Prompted: agent chooses steps"
     : `${p.replaceAll(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase())}: agent chooses steps`;
 
 /** Short model name for display: drop the org prefix and any path. */
 export const shortModel = (s?: string) => s?.split("/").filter(Boolean).pop();
 
+/** Readable controller name: the local adapters by what they are, API models by short name. */
+export const controllerName = (c?: string) => {
+    if (!c) return undefined;
+    if (/sft-controller/.test(c)) return "2B imitation";
+    if (/grpo/.test(c)) return "2B GRPO";
+    return shortModel(c.replace(/^local:/, "").split("+")[0]);
+};
+
 /** The controller (and tool preset) behind a run, or null for the fixed loop. */
 export const controllerLabel = (run?: Row["run"]) =>
-    run?.controller ? `${shortModel(run.controller)}${run.tools && run.tools !== "full" ? ` · ${run.tools} tools` : ""}` : null;
+    run?.controller ? `${controllerName(run.controller)}${run.tools && run.tools !== "full" ? ` · ${run.tools} tools` : ""}` : null;
 
 export const pretty = (s?: string | null) => s?.replaceAll("_", " ").toLowerCase() ?? "no valid verdict";
 
@@ -87,11 +98,14 @@ function App() {
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState("Ready");
     const [error, setError] = useState("");
+    const [pending, setPending] = useState<Pending>(null);
+    const [runInfo, setRunInfo] = useState<Row["run"] | null>(null);
+    const [runKey, setRunKey] = useState(0);
     const source = useRef<EventSource | null>(null);
 
     useEffect(() => {
         Promise.all([getJson<Health>("/api/health"), getJson<Trace[]>("/api/traces")])
-            .then(([h, t]) => { setHealth(h); setTraces(t); setTrace(t[0]?.name ?? ""); setTraceB(t[1]?.name ?? ""); })
+            .then(([h, t]) => { setHealth(h); if (h.policies.includes("controller")) setPolicy("controller"); setTraces(t); setTrace(t[0]?.name ?? ""); setTraceB(t[1]?.name ?? ""); })
             .catch((e: Error) => setError(e.message));
         return () => source.current?.close();
     }, []);
@@ -138,6 +152,9 @@ function App() {
         source.current = null;
         setSteps([]);
         setRow(null);
+        setPending(null);
+        setRunInfo(null);
+        setRunKey((k) => k + 1);
         setError("");
         setBusy(true);
         setStatus("Connecting…");
@@ -155,6 +172,7 @@ function App() {
                 const saved = await getJson<Row>(savedUrl);
                 setClaim(saved.claim);
                 setRow(saved);
+                setRunInfo(saved.run ?? null);
                 setSteps(saved.steps);
                 setStatus("Saved trace loaded");
             } catch (e) {
@@ -181,9 +199,9 @@ function App() {
         const handlers: Record<string, (data: any) => void> = {
             queued: (d) => setStatus(d.message),
             status: (d) => setStatus(d.message),
-            run: (d) => { setClaim(d.claim); setStatus(d.replay ? "Replaying saved run…" : "Checking claim…"); },
-            action: (d) => setStatus(`${d.action}…`),
-            step: (d) => setSteps((prev) => [...prev, d.step]),
+            run: (d) => { setClaim(d.claim); setRunInfo(d.run ?? null); setStatus(d.replay ? "Replaying saved run…" : "Checking claim…"); },
+            action: (d) => { setStatus(`${d.action}…`); setPending({ t: d.t, action: d.action, args: d.args ?? {} }); },
+            step: (d) => { setPending(null); setSteps((prev) => [...prev, d.step]); },
             final: (d) => {
                 setRow(d.row); setSteps(d.row.steps); setStatus("Complete"); finish();
                 // --save-live may have written a new trace file: offer it in Browse without a reload
@@ -211,6 +229,8 @@ function App() {
         live: { label: "Live", dot: "bg-success" },
         saved: { label: "Saved traces only", dot: "bg-warning" },
     }[backendState];
+
+    const result = { claim, row, steps, status, busy, pending, runKey, run: runInfo ?? row?.run ?? null, animate: mode !== "browse" };
 
     const showForm = mode === "replay" || mode === "live";
     const canRun = !busy && !!health && (mode === "live" ? !!input.trim() : !!claimId);
@@ -271,10 +291,10 @@ function App() {
                                     className="cursor-pointer text-sm font-medium disabled:opacity-40">
                                     ← Back
                                 </button>
-                                <VerificationResult claim={claim} row={row} steps={steps} status={status} busy={busy} />
+                                <VerificationResult {...result} />
                             </>}
                         </div>
-                    ) : <VerificationResult claim={claim} row={row} steps={steps} status={status} busy={busy} />}
+                    ) : <VerificationResult {...result} />}
                 </div>
             </main>
         </div>

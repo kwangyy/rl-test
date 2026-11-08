@@ -1,6 +1,7 @@
-import { controllerLabel, pretty, toneOf, type Row, type Step } from "../app";
+import { controllerLabel, controllerName, pretty, toneOf, type Row, type Step } from "../app";
 import { StepTimeline } from "./StepTimeline";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ArchitectureDiagram, PlayerControls, buildFrames, frameStatus, stepsShown, usePlayer, type Pending } from "./Architecture";
 
 function useCountUp(target: number, duration = 800) {
     const [value, setValue] = useState(0);
@@ -60,7 +61,24 @@ function Shimmer({ className, children }: { className: string; children?: React.
     );
 }
 
-export function VerificationResult({ claim, row, steps, status, busy }: { claim: string; row: Row | null; steps: Step[]; status: string; busy: boolean }) {
+type Props = {
+    claim: string; row: Row | null; steps: Step[]; status: string; busy: boolean;
+    pending: Pending; runKey: number; run: Row["run"] | null; animate: boolean;
+};
+
+export function VerificationResult({ claim, row: fullRow, steps: allSteps, status: liveStatus, busy: running, pending, runKey, run, animate }: Props) {
+    // The diagram is for agent runs; the fixed loop (no controller) keeps the plain timeline.
+    const diagram = !!run?.controller;
+    const frames = useMemo(() => buildFrames(allSteps, pending, running, fullRow), [allSteps, pending, running, fullRow]);
+    const player = usePlayer(frames, runKey, animate, running);
+    // While the diagram plays, the timeline and verdict follow it rather than the raw event stream.
+    const following = diagram && player.playing;
+    const steps = following ? allSteps.slice(0, stepsShown(player.frame)) : allSteps;
+    const row = following ? null : fullRow;
+    const busy = running || following;
+    const status = following ? frameStatus(player.frame) : liveStatus;
+    const active = diagram && player.frame.kind !== "input" ? player.frame.i : undefined;
+
     const hitById = new Map(steps.flatMap(s => s.result.hits ?? []).map(h => [`${h.page}:${h.line}`, h]));
     const citedIds = row?.final.evidence ?? [];
     const cited = new Set(citedIds);
@@ -81,6 +99,17 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
                     <span aria-hidden className="ml-1 select-none align-[-0.3em] text-6xl leading-0 text-primary/40">”</span>
                 </h2>
 
+                {diagram && (
+                    <div className="card-raised z-20 rounded-xl bg-card px-2 pt-3 pb-2.5 ring-1 ring-border lg:sticky lg:top-3">
+                        <div className="mb-1 flex items-center justify-between px-3">
+                            <span className="eyebrow">How the agent works</span>
+                            <span className="text-xs text-muted-foreground" role="status">{frameStatus(player.frame)}</span>
+                        </div>
+                        <ArchitectureDiagram frame={player.frame} steps={allSteps} row={fullRow}
+                            controller={controllerName(run?.controller)} maxSteps={run?.max_steps ?? 8} />
+                        <PlayerControls player={player} frames={frames} busy={running} />
+                    </div>
+                )}
                 {(row || busy) && (
                     <div
                         key={row ? "done" : "pending"}
@@ -140,7 +169,8 @@ export function VerificationResult({ claim, row, steps, status, busy }: { claim:
                         )}
                     </div>
                 )}
-                <StepTimeline steps={steps} cited={cited} busy={busy} />
+                <StepTimeline steps={steps} cited={cited} busy={busy} active={active}
+                    onSelect={diagram ? player.seekStep : undefined} />
             </>}
         </section>
     );
