@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { policyLabel, type Claim, type Health, type Mode, type Trace } from "../app"
+import { policyLabel, type Claim, type Health, type Mode } from "../app"
 
 export const fieldClass =
     "w-full rounded-lg resize-none leading-relaxed border bg-background px-3 py-2 text-sm shadow-sm transition placeholder:text-muted-foreground hover:border-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50";
 
 type Props = {
-    health: Health | null; traces: Trace[]; claims: Claim[];
-    trace: string; setTrace: (v: string) => void;
+    health: Health | null; claims: Claim[];
     claimId: string; setClaimId: (v: string) => void;
     mode: Mode;
     input: string; setInput: (v: string) => void;
@@ -100,16 +99,16 @@ export function Select({
     );
 }
 
-const modes: Mode[] = ["browse", "compare", "replay", "live"];
+const modes: Mode[] = ["live", "replay"];
 
 export function ModeTabs({ mode, setMode, busy, liveAvailable }: {
     mode: Mode; setMode: (v: Mode) => void; busy: boolean; liveAvailable: boolean;
 }) {
     return (
-        <nav aria-label="Mode" className="relative grid grid-cols-4 rounded-lg bg-secondary p-1">
+        <nav aria-label="Mode" className="relative grid grid-cols-2 rounded-lg bg-secondary p-1">
             <span
                 aria-hidden
-                className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/4)] rounded-md bg-background shadow-sm transition-transform duration-300 ease-out"
+                className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-md bg-background shadow-sm transition-transform duration-300 ease-out"
                 style={{ transform: `translateX(${modes.indexOf(mode) * 100}%)` }}
             />
             {modes.map((m) => (
@@ -128,7 +127,7 @@ export function ModeTabs({ mode, setMode, busy, liveAvailable }: {
     );
 }
 
-export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, setClaimId, mode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
+export function ClaimForm({ health, claims, claimId, setClaimId, mode, input, setInput, policy, setPolicy, busy, canRun, onStart }: Props) {
     return (
         <form
             className="min-w-0 space-y-4 card-raised rounded-xl p-5 pt-4 border bg-card lg:sticky lg:top-8"
@@ -136,29 +135,20 @@ export function ClaimForm({ health, traces, claims, trace, setTrace, claimId, se
         >
             {mode !== "live" ? (
                 <>
-                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                        Experiment
-                        <Select
-                            value={trace}
-                            onChange={setTrace}
-                            disabled={busy || !traces.length}
-                            placeholder="No saved traces available"
-                            options={traces.map((t) => ({
-                                value: t.name,
-                                label: t.name.replace(/\.jsonl$/, ""),
-                            }))}
-                        />
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                        Claim
-                        <Select
-                            value={claimId}
-                            onChange={setClaimId}
-                            disabled={busy || !claims.length}
-                            placeholder="Select an experiment"
-                            options={claims.map((c) => ({ value: String(c.id), label: c.claim }))}
-                        />
-                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        Saved runs of the 2B imitation controller on FEVER dev claims, played back step by step.
+                    </p>
+                    <fieldset className="flex min-w-0 flex-col gap-2 text-sm font-medium" disabled={busy}>
+                        <legend className="mb-2">Claim</legend>
+                        {claims.length === 0 && <p className="text-sm font-normal text-muted-foreground">Loading saved runs…</p>}
+                        {claims.map((c) => (
+                            <label key={c.id} className={`flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2 text-sm font-normal leading-snug transition has-disabled:cursor-not-allowed ${String(c.id) === claimId ? "border-primary/60 bg-primary/5" : "hover:border-foreground/30"}`}>
+                                <input type="radio" name="claim" className="mt-0.5 accent-(--primary)" value={String(c.id)}
+                                    checked={String(c.id) === claimId} onChange={() => setClaimId(String(c.id))} />
+                                <span className="min-w-0 flex-1">{c.claim}</span>
+                            </label>
+                        ))}
+                    </fieldset>
                 </>
             ) : (
                 <>

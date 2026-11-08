@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ClaimForm, ModeTabs } from "./components/ClaimForm";
 import { ThemeToggle } from "./components/ThemeToggle";
-import { TraceTable } from "./components/TraceTable";
-import { Compare } from "./components/Compare";
 import { VerificationResult } from "./components/VerificationResult";
 import type { Pending } from "./components/Architecture";
 
@@ -19,7 +17,22 @@ export type Claim = {
     n_steps: number;
     n_ops?: number;
 };
-export type Mode = "browse" | "replay" | "live" | "compare";
+export type Mode = "replay" | "live";
+
+/**
+ * Replay offers a handful of saved runs of the live controller (2B imitation, follow tools,
+ * dev 900), chosen to show the different paths it takes. All are correct verdicts.
+ */
+export const FEATURED_TRACE =
+    "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_ctl-local-sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples_run1_follow_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl";
+export const FEATURED_IDS = [
+    "8740",   // supports in one search
+    "137968", // refutes in one search
+    "224186", // supports after following a link (two hops)
+    "8834",   // refutes after a follow and a second search
+    "227372", // refutes after two follows
+    "134748", // not enough info: searches twice, then abstains
+];
 export type Hit = { page: string; line: number; text: string };
 export type Step = {
     t: number;
@@ -81,14 +94,9 @@ function App() {
     const [health, setHealth] = useState<Health | null>(null);
     const [traces, setTraces] = useState<Trace[]>([]);
     const [claims, setClaims] = useState<Claim[]>([]);
-    const [loadingClaims, setLoadingClaims] = useState(false);
-    const [browseDetail, setBrowseDetail] = useState(false);
     const [trace, setTrace] = useState("");
-    const [traceB, setTraceB] = useState("");
-    const [claimsB, setClaimsB] = useState<Claim[]>([]);
-    const [loadingB, setLoadingB] = useState(false);
     const [claimId, setClaimId] = useState("");
-    const [mode, setMode] = useState<Mode>("browse");
+    const [mode, setMode] = useState<Mode>("live");
     const [input, setInput] = useState("");
     const [policy, setPolicy] = useState("fixed");
 
@@ -105,7 +113,13 @@ function App() {
 
     useEffect(() => {
         Promise.all([getJson<Health>("/api/health"), getJson<Trace[]>("/api/traces")])
-            .then(([h, t]) => { setHealth(h); if (h.policies.includes("controller")) setPolicy("controller"); setTraces(t); setTrace(t[0]?.name ?? ""); setTraceB(t[1]?.name ?? ""); })
+            .then(([h, t]) => {
+                setHealth(h);
+                if (h.policies.includes("controller")) setPolicy("controller");
+                if (!h.live) setMode("replay");
+                setTraces(t);
+                setTrace(t.some((x) => x.name === FEATURED_TRACE) ? FEATURED_TRACE : t[0]?.name ?? "");
+            })
             .catch((e: Error) => setError(e.message));
         return () => source.current?.close();
     }, []);
@@ -115,36 +129,19 @@ function App() {
         let stale = false;
         setClaims([]);
         setClaimId("");
-        setLoadingClaims(true);
-        setBrowseDetail(false);
-        setClaim("");
-        setRow(null);
-        setSteps([]);
         getJson<{ items: Claim[] }>(`/api/traces/${encodeURIComponent(trace)}?limit=10000`)
             .then(({ items }) => {
                 if (stale) return;
-                setClaims(items);
-                setClaimId(String(items[0]?.id ?? ""));
+                // the featured claims, in their listed order; any other trace offers all of its claims
+                const byId = new Map(items.map((c) => [String(c.id), c]));
+                const featured = FEATURED_IDS.flatMap((id) => byId.get(id) ?? []);
+                const shown = trace === FEATURED_TRACE && featured.length ? featured : items;
+                setClaims(shown);
+                setClaimId(String(shown[0]?.id ?? ""));
             })
-            .catch((e: Error) => !stale && setError(e.message))
-            .finally(() => !stale && setLoadingClaims(false));
+            .catch((e: Error) => !stale && setError(e.message));
         return () => { stale = true; };
     }, [trace]);
-
-    // Compare's second run: only its summary list is needed, nothing else resets.
-    useEffect(() => {
-        if (!traceB) return;
-        let stale = false;
-        setClaimsB([]);
-        setLoadingB(true);
-        getJson<{ items: Claim[] }>(`/api/traces/${encodeURIComponent(traceB)}?limit=10000`)
-            .then(({ items }) => !stale && setClaimsB(items))
-            .catch((e: Error) => !stale && setError(e.message))
-            .finally(() => !stale && setLoadingB(false));
-        return () => { stale = true; };
-    }, [traceB]);
-
-    useEffect(() => { setBrowseDetail(false); }, [mode]);
 
     async function start(savedClaimId = claimId) {
         if (busy) return;
@@ -161,32 +158,11 @@ function App() {
 
         const isLive = mode === "live";
         setClaim(isLive ? input.trim() : claims.find((c) => String(c.id) === savedClaimId)?.claim ?? "");
-
         const savedUrl = `/api/traces/${encodeURIComponent(trace)}/${encodeURIComponent(savedClaimId)}`;
-        if (mode === "browse") {
-            setClaimId(savedClaimId);
-            setBrowseDetail(true);
-            window.scrollTo({ top: 0 });
-            setStatus("Loading saved trace…");
-            try {
-                const saved = await getJson<Row>(savedUrl);
-                setClaim(saved.claim);
-                setRow(saved);
-                setRunInfo(saved.run ?? null);
-                setSteps(saved.steps);
-                setStatus("Saved trace loaded");
-            } catch (e) {
-                setError(e instanceof Error ? e.message : "Could not load the saved trace.");
-                setStatus("Stopped");
-            } finally {
-                setBusy(false);
-            }
-            return;
-        }
 
         const url = isLive
             ? `/api/live?${new URLSearchParams({ claim: input.trim(), policy })}`
-            : `${savedUrl}/replay?delay=0.3`;
+            : `${savedUrl}/replay?delay=0.05`; // the diagram sets the pace
         const events = new EventSource(url);
         source.current = events;
 
@@ -204,8 +180,6 @@ function App() {
             step: (d) => { setPending(null); setSteps((prev) => [...prev, d.step]); },
             final: (d) => {
                 setRow(d.row); setSteps(d.row.steps); setStatus("Complete"); finish();
-                // --save-live may have written a new trace file: offer it in Browse without a reload
-                if (isLive) getJson<Trace[]>("/api/traces").then(setTraces).catch(() => undefined);
             },
             error: (d) => finish(d.message),
         };
@@ -230,9 +204,8 @@ function App() {
         saved: { label: "Saved traces only", dot: "bg-warning" },
     }[backendState];
 
-    const result = { claim, row, steps, status, busy, pending, runKey, run: runInfo ?? row?.run ?? null, animate: mode !== "browse" };
+    const result = { claim, row, steps, status, busy, pending, runKey, run: runInfo ?? row?.run ?? null, animate: true };
 
-    const showForm = mode === "replay" || mode === "live";
     const canRun = !busy && !!health && (mode === "live" ? !!input.trim() : !!claimId);
 
     return (
@@ -258,13 +231,10 @@ function App() {
                     <p role="alert" className="mb-6 px-5 py-4 rounded-xl bg-danger/10 text-sm text-danger border">{error}</p>
                 )}
 
-                <div className={`grid items-start gap-8 ${showForm ? "lg:grid-cols-[340px_1fr]" : ""}`}>
-                    {showForm && <ClaimForm
+                <div className="grid items-start gap-8 lg:grid-cols-[340px_1fr]">
+                    <ClaimForm
                         health={health}
-                        traces={traces}
                         claims={claims}
-                        trace={trace}
-                        setTrace={setTrace}
                         claimId={claimId}
                         setClaimId={setClaimId}
                         mode={mode}
@@ -275,26 +245,8 @@ function App() {
                         busy={busy}
                         canRun={canRun}
                         onStart={start}
-                    />}
-                    {mode === "compare" ? (
-                        <Compare key={`${trace}|${traceB}`} traces={traces} nameA={trace} nameB={traceB}
-                            setNameA={setTrace} setNameB={setTraceB}
-                            claimsA={claims} claimsB={claimsB} loading={loadingClaims || loadingB} />
-                    ) : mode === "browse" ? (
-                        <div className="min-w-0 space-y-5">
-                            <div hidden={browseDetail}>
-                                <TraceTable key={trace} traces={traces} trace={trace} setTrace={setTrace} claims={claims} loading={loadingClaims} busy={busy}
-                                    selectedId={claimId} onOpen={(selected) => { void start(String(selected.id)); }} />
-                            </div>
-                            {browseDetail && <>
-                                <button type="button" disabled={busy} onClick={() => setBrowseDetail(false)}
-                                    className="cursor-pointer text-sm font-medium disabled:opacity-40">
-                                    ← Back
-                                </button>
-                                <VerificationResult {...result} />
-                            </>}
-                        </div>
-                    ) : <VerificationResult {...result} />}
+                    />
+                    <VerificationResult {...result} />
                 </div>
             </main>
         </div>

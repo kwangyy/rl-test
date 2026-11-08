@@ -25,8 +25,8 @@ browser ──https──> Cloudflare (rl-project.kwangyyinc.com) ──tunnel�
     - Sub-claims still come from flash: cached for dev claims, an API call for typed text.
   - `prompted`: `qwen/qwen3.8-flash` on OpenRouter as the controller, with the same `follow` tools. It is paid for with the key named by `-KeyEnv` (default `OPENROUTER_API_KEY_TEAM`).
   - Pass `-ControllerAdapter ""` to `start-backend.ps1` to turn off the `controller` policy.
-- **Browse, Compare and Replay:** every `verifier/data/traces/*.jsonl`, including the controller GRPO, imitation and flash traces.
-- **Live runs** are saved to `verifier/data/traces/fever_dev_public-live.jsonl` (git-ignored, because it holds visitors' text), so they show up in Browse.
+- **Replay:** six featured claims from the committed imitation-controller trace (`FEATURED_IDS` in `demo/app.tsx`), played back through the architecture diagram.
+- **Live runs** are saved to `verifier/data/traces/fever_dev_public-live.jsonl` (git-ignored, because it holds visitors' text), for later inspection through `/api/traces`.
 - **Limits:** one live run at a time on the GPU, and others queue. Holdout and calibration claim IDs are refused.
 
 ## One-time setup

@@ -30,13 +30,14 @@ The proposal's AG-2 row (removed with `proposal.tex` in `6338188`):
 ### 2.1 What it is for
 
 The demo's Live mode (AG-3) shows one claim being checked as it happens:
-the query, the hits, the verifier's verdict, and then commit or abstain. Browse
-and Compare mode read saved traces. This backend serves both through one
+the query, the hits, the verifier's verdict, and then commit or abstain. Replay
+plays back saved traces. This backend serves both through one
 event format, so the frontend draws a live run and a saved run the same way.
 
-The `demo/` frontend provides saved-trace browsing, replay, live claims,
-a step timeline and expandable evidence with final citations marked. Browse loads complete traces on demand; Replay streams their recorded
-steps. Compare reads two saved traces through the same summary and row endpoints and joins them by claim ID.
+The `demo/` frontend has two tabs, Live and Replay. Agent runs show an architecture
+diagram that highlights the running component at each step, above a step timeline with
+expandable evidence and final citations marked. Replay streams the recorded steps of a few
+featured claims (`FEATURED_IDS` in `demo/app.tsx`).
 
 ### 2.2 Run it
 
