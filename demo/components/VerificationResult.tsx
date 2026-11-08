@@ -100,12 +100,12 @@ export function VerificationResult({ claim, row: fullRow, steps: allSteps, statu
                 </h2>
 
                 {diagram && (
-                    <div className="card-raised z-20 rounded-xl bg-card px-2 pt-3 pb-2.5 ring-1 ring-border lg:sticky lg:top-3">
+                    <div className="card-raised rounded-xl bg-card px-2 pt-3 pb-2.5 ring-1 ring-border">
                         <div className="mb-1 flex items-center justify-between px-3">
                             <span className="eyebrow">How the agent works</span>
                             <span className="text-xs text-muted-foreground" role="status">{frameStatus(player.frame)}</span>
                         </div>
-                        <ArchitectureDiagram frame={player.frame} steps={allSteps} row={fullRow}
+                        <ArchitectureDiagram claim={claim} frame={player.frame} steps={allSteps} row={fullRow}
                             run={run} controller={controllerName(run?.controller)} />
                         <PlayerControls player={player} frames={frames} busy={running} />
                     </div>

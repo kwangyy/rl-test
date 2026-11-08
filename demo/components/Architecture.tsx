@@ -169,16 +169,28 @@ function resultText(step: Step): string {
 
 type Rect = { x: number; y: number; w: number; h: number };
 const W = 770, H = 352;
-const CLAIM: Rect = { x: 24, y: 14, w: 150, h: 46 };
-const CTL: Rect = { x: 226, y: 14, w: 244, h: 92 };
-const FINAL: Rect = { x: 596, y: 14, w: 160, h: 92 };
+const CLAIM: Rect = { x: 24, y: 14, w: 160, h: 80 };
+const CTL: Rect = { x: 226, y: 14, w: 244, h: 80 };
+const FINAL: Rect = { x: 596, y: 14, w: 160, h: 80 };
 const TOOL_Y = 162, TOOL_H = 70, TOOLS_X0 = 44, TOOLS_X1 = 726, GAP = 14;
-const STATE: Rect = { x: 110, y: 272, w: 540, h: 70 };
+const STATE: Rect = { x: 115, y: 272, w: 540, h: 70 };
 const cx = (b: Rect) => b.x + b.w / 2;
-const FAN_Y = 134, MERGE_Y = 258;
+const FAN_Y = 136, MERGE_Y = 258, BACK_Y = 116;
 
-function Node({ b, lit, color, title, sub, extra, dim, mono = false }: {
-    b: Rect; lit: boolean; color: string; title: string; sub?: string; extra?: string; dim?: boolean; mono?: boolean;
+/** Greedy word wrap to `n` characters a line, at most `max` lines (the last one clipped). */
+function wrap(text: string, n: number, max: number) {
+    const lines: string[] = [];
+    let cur = "";
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+        if (cur && (cur + " " + word).length > n) { lines.push(cur); cur = word; } else cur = cur ? `${cur} ${word}` : word;
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > max) lines.splice(max - 1, lines.length, `${lines.slice(max - 1).join(" ")}`);
+    return lines.map((l) => clip(l, n));
+}
+
+function Node({ b, lit, color, title, sub, extra, lines, dim, mono = false }: {
+    b: Rect; lit: boolean; color: string; title: string; sub?: string; extra?: string; lines?: string[]; dim?: boolean; mono?: boolean;
 }) {
     const chars = Math.floor((b.w - 20) / 6.3); // what fits on one line at 11px
     return (
@@ -194,6 +206,7 @@ function Node({ b, lit, color, title, sub, extra, dim, mono = false }: {
                 fontFamily={mono ? "var(--font-mono)" : undefined}
                 fill={lit ? color : "var(--foreground)"} style={{ transition: "all 250ms" }}>{title}</text>
             {sub && <text x={b.x + 11} y={b.y + 39} fontSize={11} fill="var(--muted-foreground)">{clip(sub, chars + 3)}</text>}
+            {lines?.map((l, i) => <text key={i} x={b.x + 11} y={b.y + 39 + i * 14} fontSize={11} fill="var(--muted-foreground)">{l}</text>)}
             {extra && <text x={b.x + 11} y={b.y + b.h - 11} fontSize={11} fontFamily="var(--font-mono)"
                 fill={lit ? "var(--foreground)" : "var(--muted-foreground)"}>{clip(extra, chars)}</text>}
         </g>
@@ -216,8 +229,8 @@ function Edge({ d, lit, color = "var(--primary)", label, lx, ly }: {
     );
 }
 
-export function ArchitectureDiagram({ frame, steps, row, run, controller }: {
-    frame: Frame; steps: Step[]; row: Row | null; run: Row["run"] | null; controller?: string;
+export function ArchitectureDiagram({ claim, frame, steps, row, run, controller }: {
+    claim: string; frame: Frame; steps: Step[]; row: Row | null; run: Row["run"] | null; controller?: string;
 }) {
     const shown = stepsShown(frame);
     const maxSteps = run?.max_steps ?? 8;
@@ -279,7 +292,7 @@ export function ArchitectureDiagram({ frame, steps, row, run, controller }: {
                     fill="var(--muted-foreground)">RETRIEVAL</text>
             </g>}
 
-            <Edge d={`M${CLAIM.x + CLAIM.w} ${CLAIM.y + 23} H${CTL.x - 2}`} lit={k === "input"} />
+            <Edge d={`M${CLAIM.x + CLAIM.w} ${CLAIM.y + 40} H${CTL.x - 2}`} lit={k === "input"} />
             {ordered.map((a) => (
                 <Edge key={`in-${a}`} d={`M${cx(CTL)} ${CTL.y + CTL.h} V${FAN_Y} H${cx(box[a]!)} V${TOOL_Y - 2}`}
                     lit={(k === "decide" || k === "run") && action === a} color={colorOf(a)} />
@@ -288,12 +301,12 @@ export function ArchitectureDiagram({ frame, steps, row, run, controller }: {
                 <Edge key={`out-${a}`} d={`M${cx(box[a]!)} ${TOOL_Y + TOOL_H} V${MERGE_Y} H${cx(STATE)} V${STATE.y - 2}`}
                     lit={resultLit === a} color={colorOf(a)} />
             ))}
-            <Edge d={`M${STATE.x} ${STATE.y + 31} H14 V${CTL.y + 72} H${CTL.x - 2}`} lit={k === "result" || k === "choose"}
-                color={STATE_COLOR} label="feedback" lx={110} ly={CTL.y + 66} />
+            <Edge d={`M${STATE.x} ${STATE.y + 35} H12 V${BACK_Y} H${CTL.x + 28} V${CTL.y + CTL.h + 2}`}
+                lit={k === "result" || k === "choose"} color={STATE_COLOR} label="feedback" lx={64} ly={BACK_Y - 6} />
             <Edge d={`M${CTL.x + CTL.w} ${CTL.y + 46} H${FINAL.x - 2}`} lit={stopLit} color={finalColor}
                 label="commit / abstain" lx={(CTL.x + CTL.w + FINAL.x) / 2} ly={CTL.y + 40} />
 
-            <Node b={CLAIM} lit={k === "input"} color="var(--primary)" title="Claim" />
+            <Node b={CLAIM} lit={k === "input"} color="var(--primary)" title="Claim" lines={wrap(claim, 23, 3)} />
             <Node b={CTL} lit={ctlLit} color={CONTROLLER} title="Controller"
                 sub={`${controller ?? "agent"} · one action per turn`} extra={ctlLine} />
             <Node b={FINAL} lit={stopLit} color={finalColor} title="Final answer" dim={!stopLit && !row}
