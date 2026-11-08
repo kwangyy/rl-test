@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { pretty, toneOf, type Row, type Step } from "../app";
+import { pretty, shortModel, toneOf, type Row, type Step } from "../app";
 
 /** The action the controller has picked but whose result has not arrived yet (live and replay only). */
 export type Pending = { t: number; action: string; args: Step["args"] & Record<string, unknown> } | null;
 
-type Box = "retrieval" | "decomposer" | "verifier";
-const BOX_OF: Record<string, Box> = {
-    search: "retrieval", follow: "retrieval", open_page: "retrieval", find_pages: "retrieval", web_pages: "retrieval",
-    decompose: "decomposer", verify: "verifier",
-};
+const RETRIEVAL = ["search", "follow", "open_page", "find_pages", "web_pages"];
 const isStop = (action: string) => action === "commit" || action === "abstain";
 
 /**
  * One moment of a run. A tool step is three frames (the controller picks it, the tool runs,
- * the result lands in the shared state); commit/abstain is two (pick, then stop -> answer).
+ * the result lands in the episode state); commit/abstain is two (pick, then stop -> answer).
  */
 export type Frame =
     | { kind: "input" }
@@ -97,37 +93,58 @@ export function usePlayer(frames: Frame[], runKey: number, animate: boolean, bus
     };
 }
 
+const VERB: Record<string, string> = {
+    search: "searching the index", follow: "opening a linked page", open_page: "opening a page",
+    find_pages: "listing page titles", web_pages: "searching the web", decompose: "splitting the claim",
+    verify: "judging the evidence",
+};
+
 /** What the frame's status line says while a run is playing back. */
 export function frameStatus(f: Frame): string {
-    const verb: Record<string, string> = {
-        search: "searching", follow: "following a link", decompose: "splitting the claim",
-        verify: "judging the evidence", open_page: "opening a page", find_pages: "finding pages", web_pages: "searching the web",
-    };
     switch (f.kind) {
         case "input": return "Claim received";
         case "choose": return "Controller choosing the next action…";
         case "decide": return `Controller chose ${f.step.action}`;
-        case "run": return `${boxLabel[BOX_OF[f.step.action] ?? "retrieval"]}: ${verb[f.step.action] ?? f.step.action}…`;
-        case "result": return "Result added to the shared state";
+        case "run": return `${f.step.action}: ${VERB[f.step.action] ?? "running"}…`;
+        case "result": return "Result added to the episode state";
         case "stop": return "Final answer";
     }
 }
 
-const boxLabel: Record<Box, string> = { retrieval: "Retrieval", decomposer: "Decomposer", verifier: "Verifier" };
-const boxColor: Record<Box | "controller" | "state", string> = {
-    controller: "var(--arch-controller)", retrieval: "var(--primary)", decomposer: "var(--warning)",
-    verifier: "var(--success)", state: "var(--muted-foreground)",
-};
+/** The actions the run's controller could take, in display order (commit/abstain go to Final answer). */
+function actionsOf(run: Row["run"] | null | undefined, steps: Step[]) {
+    const list = [...(run?.tools === "nosearch" ? [] : ["search"]), ...(run?.tool_names ?? []), "decompose", "verify"];
+    // older traces without tool_names: add whatever the steps show
+    for (const s of steps) if (!isStop(s.action) && !list.includes(s.action)) list.splice(list.length - 2, 0, s.action);
+    return list;
+}
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const verifierName = (v?: string) =>
+    !v ? "verifier" : /grpo/.test(v) ? "2B GRPO" : /sft/.test(v) ? "2B SFT" : shortModel(v.split("+")[0]) ?? "verifier";
+
+/** What runs behind each action. */
+function behind(action: string, run: Row["run"] | null | undefined) {
+    const what: Record<string, string> = {
+        search: "BM25 · 5 pages", follow: "opens a linked page", open_page: "page by title",
+        find_pages: "lists page titles", web_pages: "Exa web search", decompose: "Qwen flash → sub-claims",
+        verify: `${verifierName(run?.verifier)} → verdict`,
+    };
+    return what[action] ?? action;
+}
+
+const colorOf = (action: string) =>
+    action === "decompose" ? "var(--warning)" : action === "verify" ? "var(--success)" : "var(--primary)";
+const CONTROLLER = "var(--arch-controller)", STATE_COLOR = "var(--muted-foreground)";
+
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1, n - 1))}…` : s);
 const argText = (step: Pick<Step, "action" | "args">) => {
     const a = step.args;
     const target = a.query ?? a.title ?? a.page ?? a.target ?? a.link;
     return target ? `${step.action} “${target}”` : step.action;
 };
 
-/** Shared-state numbers after the first `n` steps. */
-function sharedState(steps: Step[], n: number) {
+/** Episode-state numbers after the first `n` steps. */
+function episodeState(steps: Step[], n: number) {
     const pages = new Set<string>(), sentences = new Set<string>();
     let subclaims = 0, verdict: string | null | undefined, confidence: number | null | undefined;
     for (const s of steps.slice(0, n)) {
@@ -150,37 +167,35 @@ function resultText(step: Step): string {
 
 // ---- drawing -------------------------------------------------------------------------------
 
-const W = 770, H = 330;
-const CTL = { x: 270, y: 14, w: 220, h: 92 };
-const CLAIM = { x: 24, y: 14, w: 170, h: 46 };
-const FINAL = { x: 586, y: 14, w: 166, h: 92 };
-const TOOLS: Record<Box, { x: number; y: number; w: number; h: number }> = {
-    retrieval: { x: 60, y: 152, w: 170, h: 70 },
-    decomposer: { x: 295, y: 152, w: 170, h: 70 },
-    verifier: { x: 530, y: 152, w: 170, h: 70 },
-};
-const STATE = { x: 110, y: 254, w: 540, h: 66 };
-const cx = (b: { x: number; w: number }) => b.x + b.w / 2;
-const FAN_Y = 130, MERGE_Y = 238;
+type Rect = { x: number; y: number; w: number; h: number };
+const W = 770, H = 352;
+const CLAIM: Rect = { x: 24, y: 14, w: 150, h: 46 };
+const CTL: Rect = { x: 226, y: 14, w: 244, h: 92 };
+const FINAL: Rect = { x: 596, y: 14, w: 160, h: 92 };
+const TOOL_Y = 162, TOOL_H = 70, TOOLS_X0 = 44, TOOLS_X1 = 726, GAP = 14;
+const STATE: Rect = { x: 110, y: 272, w: 540, h: 70 };
+const cx = (b: Rect) => b.x + b.w / 2;
+const FAN_Y = 134, MERGE_Y = 258;
 
-function Node({ b, lit, color, title, sub, extra, dim }: {
-    b: { x: number; y: number; w: number; h: number }; lit: boolean; color: string;
-    title: string; sub?: string; extra?: string; dim?: boolean;
+function Node({ b, lit, color, title, sub, extra, dim, mono = false }: {
+    b: Rect; lit: boolean; color: string; title: string; sub?: string; extra?: string; dim?: boolean; mono?: boolean;
 }) {
+    const chars = Math.floor((b.w - 20) / 6.3); // what fits on one line at 11px
     return (
         <g style={{ transition: "opacity 300ms" }} opacity={dim ? 0.45 : 1}>
             <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={10}
                 fill={lit ? `color-mix(in oklch, ${color} 13%, var(--card))` : "var(--card)"}
                 stroke={lit ? color : "var(--border)"} strokeWidth={lit ? 2.2 : 1.2}
                 style={{ transition: "all 250ms", filter: lit ? `drop-shadow(0 0 10px color-mix(in oklch, ${color} 45%, transparent))` : "none" }} />
-            {lit && <circle cx={b.x + 14} cy={b.y + 17} r={4} fill={color}>
+            {lit && <circle cx={b.x + 13} cy={b.y + 17} r={4} fill={color}>
                 <animate attributeName="opacity" values="1;0.35;1" dur="1.1s" repeatCount="indefinite" />
             </circle>}
-            <text x={b.x + (lit ? 24 : 12)} y={b.y + 21} fontSize={13.5} fontWeight={600}
+            <text x={b.x + (lit ? 23 : 11)} y={b.y + 21} fontSize={13.5} fontWeight={600}
+                fontFamily={mono ? "var(--font-mono)" : undefined}
                 fill={lit ? color : "var(--foreground)"} style={{ transition: "all 250ms" }}>{title}</text>
-            {sub && <text x={b.x + 12} y={b.y + 39} fontSize={11} fill="var(--muted-foreground)">{sub}</text>}
-            {extra && <text x={b.x + 12} y={b.y + b.h - 11} fontSize={11.5} fontFamily="var(--font-mono)"
-                fill={lit ? "var(--foreground)" : "var(--muted-foreground)"}>{extra}</text>}
+            {sub && <text x={b.x + 11} y={b.y + 39} fontSize={11} fill="var(--muted-foreground)">{clip(sub, chars + 3)}</text>}
+            {extra && <text x={b.x + 11} y={b.y + b.h - 11} fontSize={11} fontFamily="var(--font-mono)"
+                fill={lit ? "var(--foreground)" : "var(--muted-foreground)"}>{clip(extra, chars)}</text>}
         </g>
     );
 }
@@ -192,7 +207,7 @@ function Edge({ d, lit, color = "var(--primary)", label, lx, ly }: {
         <g>
             <path d={d} fill="none" stroke={lit ? color : "var(--border)"} strokeWidth={lit ? 2.4 : 1.4}
                 markerEnd={`url(#${lit ? "arrow-lit" : "arrow"})`} strokeDasharray={lit ? "6 5" : undefined}
-                style={{ transition: "stroke 250ms", color }}>
+                style={{ transition: "stroke 250ms" }}>
                 {lit && <animate attributeName="stroke-dashoffset" from="22" to="0" dur="0.6s" repeatCount="indefinite" />}
             </path>
             {label && <text x={lx} y={ly} fontSize={11} textAnchor="middle"
@@ -201,41 +216,51 @@ function Edge({ d, lit, color = "var(--primary)", label, lx, ly }: {
     );
 }
 
-export function ArchitectureDiagram({ frame, steps, row, controller, maxSteps }: {
-    frame: Frame; steps: Step[]; row: Row | null; controller?: string; maxSteps: number;
+export function ArchitectureDiagram({ frame, steps, row, run, controller }: {
+    frame: Frame; steps: Step[]; row: Row | null; run: Row["run"] | null; controller?: string;
 }) {
     const shown = stepsShown(frame);
-    const st = useMemo(() => sharedState(steps, shown), [steps, shown]);
+    const maxSteps = run?.max_steps ?? 8;
+    const st = useMemo(() => episodeState(steps, shown), [steps, shown]);
+    const actions = useMemo(() => actionsOf(run, steps), [run, steps]);
     const uses = useMemo(() => {
-        const u: Record<Box, number> = { retrieval: 0, decomposer: 0, verifier: 0 };
-        for (const s of steps.slice(0, shown)) { const b = BOX_OF[s.action]; if (b) u[b]++; }
+        const u: Record<string, number> = {};
+        for (const s of steps.slice(0, shown)) u[s.action] = (u[s.action] ?? 0) + 1;
         return u;
     }, [steps, shown]);
 
+    // one box per action the controller can take, spread across the row
+    const w = (TOOLS_X1 - TOOLS_X0 - GAP * (actions.length - 1)) / actions.length;
+    const box: Record<string, Rect> = Object.fromEntries(
+        actions.map((a, i) => [a, { x: TOOLS_X0 + i * (w + GAP), y: TOOL_Y, w, h: TOOL_H }]));
+    const retrieval = actions.filter((a) => RETRIEVAL.includes(a));
+    const first = box[retrieval[0] ?? ""], lastR = box[retrieval.at(-1) ?? ""];
+    const group = first && lastR ? { x: first.x - 7, y: TOOL_Y - 9, w: lastR.x + lastR.w - first.x + 14, h: TOOL_H + 18 } : null;
+
     const k = frame.kind;
     const action = k === "decide" || k === "run" || k === "result" ? frame.step.action : null;
-    const tool = action ? BOX_OF[action] : undefined;
     const ctlLit = k === "choose" || k === "decide";
-    const runLit = k === "run" ? tool : undefined;
-    const resultLit = k === "result" ? tool : undefined;
+    const runLit = k === "run" ? action : null;
+    const resultLit = k === "result" ? action : null;
     const stopLit = k === "stop";
 
     const ctlLine = k === "choose" ? "choosing next action…"
-        : k === "decide" || k === "run" ? clip(`→ ${argText(frame.step)}`, 30)
-        : k === "stop" ? `→ ${frame.ended}` : k === "input" ? "waiting for the claim" : "reading the shared state";
-    const ended = k === "stop" ? frame.ended : null;
+        : k === "decide" || k === "run" ? `→ ${argText(frame.step)}`
+        : k === "stop" ? `→ ${frame.ended}` : k === "input" ? "waiting for the claim" : "reading the episode state";
     const finalVerdict = stopLit ? (row?.final.verdict ?? st.verdict) : null;
     const finalConf = stopLit ? (row?.final.confidence ?? st.confidence) : null;
-    const finalColor = stopLit ? (toneOf(finalVerdict).dot === "bg-success" ? "var(--success)"
-        : toneOf(finalVerdict).dot === "bg-danger" ? "var(--danger)" : "var(--warning)") : "var(--foreground)";
+    const tone = toneOf(finalVerdict).dot;
+    const finalColor = !stopLit ? "var(--foreground)"
+        : tone === "bg-success" ? "var(--success)" : tone === "bg-danger" ? "var(--danger)" : "var(--warning)";
+    const rule = (run as { final_rule?: string } | null)?.final_rule;
 
-    const toolExtra = (b: Box) => {
-        if (runLit === b) return "running…";
-        if (resultLit === b && k === "result") return clip(resultText(frame.step), 24);
-        return uses[b] ? `used ×${uses[b]}` : "not used yet";
+    const toolExtra = (a: string) => {
+        if (runLit === a) return "running…";
+        if (resultLit === a && k === "result") return resultText(frame.step);
+        return uses[a] ? `used ×${uses[a]}` : "not used yet";
     };
+    const ordered = [...actions].sort((a, b) => Number(a === action) - Number(b === action)); // lit edges on top
 
-    const ctlX = cx(CTL);
     return (
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img"
             aria-label={`Agent architecture, ${frameStatus(frame)}`}>
@@ -247,41 +272,41 @@ export function ArchitectureDiagram({ frame, steps, row, controller, maxSteps }:
                 ))}
             </defs>
 
-            {/* claim -> controller */}
+            {group && <g>
+                <rect x={group.x} y={group.y} width={group.w} height={group.h} rx={13} fill="none"
+                    stroke="var(--border)" strokeDasharray="4 4" />
+                <text x={group.x + 10} y={group.y + group.h + 13} fontSize={10} letterSpacing="0.1em"
+                    fill="var(--muted-foreground)">RETRIEVAL</text>
+            </g>}
+
             <Edge d={`M${CLAIM.x + CLAIM.w} ${CLAIM.y + 23} H${CTL.x - 2}`} lit={k === "input"} />
-            {/* controller -> each tool (the lit one last, so grey lines do not cover it) */}
-            {(Object.keys(TOOLS) as Box[]).sort((a, b) => Number(a === tool) - Number(b === tool)).map((b) => (
-                <Edge key={b} d={`M${ctlX} ${CTL.y + CTL.h} V${FAN_Y} H${cx(TOOLS[b])} V${TOOLS[b].y - 2}`}
-                    lit={(k === "decide" || k === "run") && tool === b} color={boxColor[b]} />
+            {ordered.map((a) => (
+                <Edge key={`in-${a}`} d={`M${cx(CTL)} ${CTL.y + CTL.h} V${FAN_Y} H${cx(box[a]!)} V${TOOL_Y - 2}`}
+                    lit={(k === "decide" || k === "run") && action === a} color={colorOf(a)} />
             ))}
-            {/* each tool -> shared state */}
-            {(Object.keys(TOOLS) as Box[]).sort((a, b) => Number(a === resultLit) - Number(b === resultLit)).map((b) => (
-                <Edge key={b} d={`M${cx(TOOLS[b])} ${TOOLS[b].y + TOOLS[b].h} V${MERGE_Y} H${cx(STATE)} V${STATE.y - 2}`}
-                    lit={resultLit === b} color={boxColor[b]} />
+            {ordered.map((a) => (
+                <Edge key={`out-${a}`} d={`M${cx(box[a]!)} ${TOOL_Y + TOOL_H} V${MERGE_Y} H${cx(STATE)} V${STATE.y - 2}`}
+                    lit={resultLit === a} color={colorOf(a)} />
             ))}
-            {/* feedback: shared state -> controller, round the left */}
-            <Edge d={`M${STATE.x} ${STATE.y + 28} H14 V${CTL.y + 72} H${CTL.x - 2}`} lit={k === "result" || k === "choose"}
-                color="var(--muted-foreground)" label="feedback" lx={110} ly={CTL.y + 66} />
-            {/* controller -> final answer */}
+            <Edge d={`M${STATE.x} ${STATE.y + 31} H14 V${CTL.y + 72} H${CTL.x - 2}`} lit={k === "result" || k === "choose"}
+                color={STATE_COLOR} label="feedback" lx={110} ly={CTL.y + 66} />
             <Edge d={`M${CTL.x + CTL.w} ${CTL.y + 46} H${FINAL.x - 2}`} lit={stopLit} color={finalColor}
-                label="stop" lx={(CTL.x + CTL.w + FINAL.x) / 2} ly={CTL.y + 40} />
+                label="commit / abstain" lx={(CTL.x + CTL.w + FINAL.x) / 2} ly={CTL.y + 40} />
 
             <Node b={CLAIM} lit={k === "input"} color="var(--primary)" title="Claim" />
-            <Node b={CTL} lit={ctlLit} color={boxColor.controller} title="Controller"
-                sub={clip(controller ? `${controller} · one tool or stop` : "picks one tool or stops", 36)} extra={ctlLine} />
+            <Node b={CTL} lit={ctlLit} color={CONTROLLER} title="Controller"
+                sub={`${controller ?? "agent"} · one action per turn`} extra={ctlLine} />
             <Node b={FINAL} lit={stopLit} color={finalColor} title="Final answer" dim={!stopLit && !row}
-                sub={stopLit ? clip(`${pretty(finalVerdict)}`, 24) : "verdict + citations"}
+                sub={stopLit ? pretty(finalVerdict) : rule ? `final rule ${rule}` : "verdict + citations"}
                 extra={stopLit
-                    ? `${finalConf != null ? `${(finalConf * 100).toFixed(0)}%` : "—"}${row ? ` · ${row.final.evidence.length} cited` : ""}${ended === "abstain" ? " · abstain" : ""}`
+                    ? `${finalConf != null ? `${(finalConf * 100).toFixed(0)}%` : "—"}${row ? ` · ${row.final.evidence.length} cited` : ""}`
                     : "—"} />
-            <Node b={TOOLS.retrieval} lit={runLit === "retrieval" || resultLit === "retrieval"} color={boxColor.retrieval}
-                title="Retrieval" sub="search · follow → sentences" extra={toolExtra("retrieval")} dim={!uses.retrieval && runLit !== "retrieval"} />
-            <Node b={TOOLS.decomposer} lit={runLit === "decomposer" || resultLit === "decomposer"} color={boxColor.decomposer}
-                title="Decomposer" sub="claim → sub-claims" extra={toolExtra("decomposer")} dim={!uses.decomposer && runLit !== "decomposer"} />
-            <Node b={TOOLS.verifier} lit={runLit === "verifier" || resultLit === "verifier"} color={boxColor.verifier}
-                title="Verifier" sub="claim + evidence → verdict" extra={toolExtra("verifier")} dim={!uses.verifier && runLit !== "verifier"} />
-            <Node b={STATE} lit={k === "result"} color={boxColor.state} title="Shared state"
-                sub={`${st.pages} pages · ${st.sentences} sentences · ${st.subclaims} sub-claims`}
+            {actions.map((a) => (
+                <Node key={a} b={box[a]!} lit={runLit === a || resultLit === a} color={colorOf(a)} title={a} mono
+                    sub={behind(a, run)} extra={toolExtra(a)} dim={!uses[a] && runLit !== a} />
+            ))}
+            <Node b={STATE} lit={k === "result"} color={STATE_COLOR} title="Episode state"
+                sub={`${st.pages} pages opened · ${st.sentences} sentences found · ${st.subclaims} sub-claims`}
                 extra={`latest verdict: ${st.verdict === undefined ? "—" : pretty(st.verdict)} · ${Math.max(0, maxSteps - shown)} of ${maxSteps} actions left`} />
         </svg>
     );

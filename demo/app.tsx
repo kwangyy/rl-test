@@ -44,7 +44,7 @@ export type Step = {
 export type Row = {
     claim: string;
     gold?: string | null;
-    run?: { policy?: string; verifier?: string; controller?: string; tools?: string; max_steps?: number };
+    run?: { policy?: string; verifier?: string; controller?: string; tools?: string; tool_names?: string[]; final_rule?: string; max_steps?: number };
     cost?: { n_ops?: number; tokens_in?: number; tokens_out?: number; seconds?: number };
     steps: Step[];
     final: { verdict: string | null; evidence: string[]; confidence: number | null };

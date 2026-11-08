@@ -106,7 +106,7 @@ export function VerificationResult({ claim, row: fullRow, steps: allSteps, statu
                             <span className="text-xs text-muted-foreground" role="status">{frameStatus(player.frame)}</span>
                         </div>
                         <ArchitectureDiagram frame={player.frame} steps={allSteps} row={fullRow}
-                            controller={controllerName(run?.controller)} maxSteps={run?.max_steps ?? 8} />
+                            run={run} controller={controllerName(run?.controller)} />
                         <PlayerControls player={player} frames={frames} busy={running} />
                     </div>
                 )}
