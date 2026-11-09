@@ -89,7 +89,7 @@ export function VerificationResult({ claim, row: fullRow, steps: allSteps, statu
                 <div className="rounded-xl border border-dashed px-8 py-20 text-center">
                     <h2 className="font-serif text-3xl">Nothing checked yet</h2>
                     <p className="mx-auto mt-3 max-w-sm text-sm text-foreground/60">
-                        Choose a claim and run it. The agent's searches, the sentences it found and the sources behind the verdict will show up here.
+                        Type a claim and press Verify, or pick a saved run under Replay. The agent's searches, the sentences it found and the sources behind the verdict will show up here.
                     </p>
                 </div>
             ) : <>
@@ -105,8 +105,13 @@ export function VerificationResult({ claim, row: fullRow, steps: allSteps, statu
                             <span className="eyebrow">How the agent works</span>
                             <span className="text-xs text-muted-foreground" role="status">{frameStatus(player.frame)}</span>
                         </div>
-                        <ArchitectureDiagram claim={claim} frame={player.frame} steps={allSteps} row={fullRow}
-                            run={run} controller={controllerName(run?.controller)} />
+                        {/* below ~640px the labels get too small to read, so narrow screens scroll it sideways */}
+                        <div className="scrollbar-nice overflow-x-auto">
+                            <div className="min-w-160">
+                                <ArchitectureDiagram claim={claim} frame={player.frame} steps={allSteps} row={fullRow}
+                                    run={run} controller={controllerName(run?.controller)} />
+                            </div>
+                        </div>
                         <PlayerControls player={player} frames={frames} busy={running} />
                     </div>
                 )}

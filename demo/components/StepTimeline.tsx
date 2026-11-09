@@ -75,7 +75,7 @@ export function StepTimeline({ steps, cited, busy, active, onSelect }: {
             {steps.map((step, i) => {
                 const style = actionStyles[step.action] ?? fallbackStyle;
                 // what the step acted on: a query, a page title, or the page a followed link opened
-                const target = step.args.query ?? step.args.title ?? step.args.page ?? step.args.target;
+                const target = (step.args.query ?? step.args.title ?? step.args.page ?? step.args.target)?.replaceAll("_", " ");
                 const empty = step.result.status && step.result.status !== "ok" && !step.result.hits?.length && !step.result.pages?.length;
                 return (
                     <li key={step.t} className="relative pl-10" style={{ animation: "step-in 300ms ease-out" }}

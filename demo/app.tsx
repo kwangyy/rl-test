@@ -52,7 +52,11 @@ export type Row = {
 
 export const getJson = async <T,>(path: string): Promise<T> => {
     const res = await fetch(path);
-    if (!res.ok) throw new Error((await res.json()).detail ?? "Request failed.");
+    if (!res.ok) {
+        // the tunnel or proxy can answer with an HTML error page, so don't assume JSON
+        const detail = await res.json().then((b) => b?.detail, () => null);
+        throw new Error(typeof detail === "string" ? detail : `Request failed (${res.status}).`);
+    }
     return res.json();
 };
 
@@ -195,6 +199,16 @@ function App() {
         }
     }
 
+    /** A new tab starts clean: the other tab's run (or its still-playing diagram) doesn't carry over. */
+    function changeMode(next: Mode) {
+        if (next === mode) return;
+        source.current?.close();
+        source.current = null;
+        setClaim(""); setSteps([]); setRow(null); setPending(null); setRunInfo(null);
+        setError(""); setStatus("Ready"); setBusy(false);
+        setMode(next);
+    }
+
     const backendState = !health && !error ? "connecting" : !health ? "offline" : health.live ? "live" : "saved";
 
     const statusUI = {
@@ -216,7 +230,7 @@ function App() {
                         Fact verifier
                     </h1>
                     <div className="order-last w-full lg:order-0 lg:w-96">
-                        <ModeTabs mode={mode} setMode={setMode} busy={busy} liveAvailable={!!health?.live} />
+                        <ModeTabs mode={mode} setMode={changeMode} busy={busy} liveAvailable={!!health?.live} />
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground">

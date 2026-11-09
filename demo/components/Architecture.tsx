@@ -140,7 +140,7 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1,
 const argText = (step: Pick<Step, "action" | "args">) => {
     const a = step.args;
     const target = a.query ?? a.title ?? a.page ?? a.target ?? a.link;
-    return target ? `${step.action} “${target}”` : step.action;
+    return target ? `${step.action} “${String(target).replaceAll("_", " ")}”` : step.action;
 };
 
 /** Episode-state numbers after the first `n` steps. */
@@ -196,7 +196,7 @@ function Node({ b, lit, color, title, sub, extra, lines, dim, mono = false }: {
     return (
         <g style={{ transition: "opacity 300ms" }} opacity={dim ? 0.45 : 1}>
             <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={10}
-                fill={lit ? `color-mix(in oklch, ${color} 13%, var(--card))` : "var(--card)"}
+                fill={lit ? `color-mix(in srgb, ${color} 13%, var(--card))` : "var(--card)"}
                 stroke={lit ? color : "var(--border)"} strokeWidth={lit ? 2.2 : 1.2}
                 style={{ transition: "all 250ms", filter: lit ? `drop-shadow(0 0 10px color-mix(in oklch, ${color} 45%, transparent))` : "none" }} />
             {lit && <circle cx={b.x + 13} cy={b.y + 17} r={4} fill={color}>
