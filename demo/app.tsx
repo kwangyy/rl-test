@@ -21,7 +21,8 @@ export type Mode = "replay" | "live";
 
 /**
  * Replay offers a handful of saved runs of the live controller (2B imitation, follow tools,
- * dev 900), chosen to show the different paths it takes. All are correct verdicts.
+ * dev 900), chosen to show the different paths it takes. All are correct, committed
+ * verdicts: no not-enough-info abstains.
  */
 export const FEATURED_TRACE =
     "fever_dev_prompted-sft-direct-from-base-qwen3p5-2b-5895-samples_run1_ctl-local-sft-controller-from-base-qwen3p5-2b-flash-follow-18291-samples_run1_follow_bm25-p5-k100_fever-dev-900-ids-ac9cfead_n900.jsonl";
@@ -31,7 +32,7 @@ export const FEATURED_IDS = [
     "224186", // supports after following a link (two hops)
     "8834",   // refutes after a follow and a second search
     "227372", // refutes after two follows
-    "134748", // not enough info: searches twice, then abstains
+    "79347",  // unsure after the first verify, searches again and refutes
 ];
 export type Hit = { page: string; line: number; text: string };
 export type Step = {
