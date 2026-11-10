@@ -61,14 +61,6 @@ export const getJson = async <T,>(path: string): Promise<T> => {
     return res.json();
 };
 
-/** "prompted-bm25" -> "Prompted" etc. Unknown policies fall back to their raw name. */
-export const policyLabel = (p: string) =>
-    p.startsWith("fixed") ? "Fixed: search, then verify"
-    : p === "controller" ? "Controller: 2B imitation model"
-    : p === "prompted" ? "Prompted: Qwen flash chooses steps"
-    : p.startsWith("prompted") ? "Prompted: agent chooses steps"
-    : `${p.replaceAll(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase())}: agent chooses steps`;
-
 /** Short model name for display: drop the org prefix and any path. */
 export const shortModel = (s?: string) => s?.split("/").filter(Boolean).pop();
 
@@ -103,7 +95,6 @@ function App() {
     const [claimId, setClaimId] = useState("");
     const [mode, setMode] = useState<Mode>("live");
     const [input, setInput] = useState("");
-    const [policy, setPolicy] = useState("fixed");
 
     const [claim, setClaim] = useState("");
     const [steps, setSteps] = useState<Step[]>([]);
@@ -120,7 +111,6 @@ function App() {
         Promise.all([getJson<Health>("/api/health"), getJson<Trace[]>("/api/traces")])
             .then(([h, t]) => {
                 setHealth(h);
-                if (h.policies.includes("controller")) setPolicy("controller");
                 if (!h.live) setMode("replay");
                 setTraces(t);
                 setTrace(t.some((x) => x.name === FEATURED_TRACE) ? FEATURED_TRACE : t[0]?.name ?? "");
@@ -210,6 +200,9 @@ function App() {
         setMode(next);
     }
 
+    // Live always runs the 2B imitation controller (the fixed loop only if a server has no controller)
+    const policy = health?.policies.includes("controller") ? "controller" : health?.policies[0] ?? "fixed";
+
     const backendState = !health && !error ? "connecting" : !health ? "offline" : health.live ? "live" : "saved";
 
     const statusUI = {
@@ -248,15 +241,12 @@ function App() {
 
                 <div className="grid items-start gap-8 lg:grid-cols-[340px_1fr]">
                     <ClaimForm
-                        health={health}
                         claims={claims}
                         claimId={claimId}
                         setClaimId={setClaimId}
                         mode={mode}
                         input={input}
                         setInput={setInput}
-                        policy={policy}
-                        setPolicy={setPolicy}
                         busy={busy}
                         canRun={canRun}
                         onStart={start}
